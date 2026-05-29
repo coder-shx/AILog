@@ -40,6 +40,14 @@
   <a href="#roadmap">Roadmap</a>
 </p>
 
+## Website
+
+The hosted static demo is designed for GitHub Pages:
+
+- Website: `https://coder-shx.github.io/AILog/`
+- Mode: static demo data, no private local files are read
+- Full local app: run `pnpm dev` to connect the Vue UI to the Fastify API and scan local Claude/Codex history
+
 ## Why AILog
 
 AILog is local-first observability for your AI coding workflow.

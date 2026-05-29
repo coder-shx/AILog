@@ -14,7 +14,7 @@ import LiveSessionsView from "@/views/LiveSessionsView.vue";
 import CapabilitiesView from "@/views/CapabilitiesView.vue";
 
 export const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: "/", name: "dashboard", component: DashboardView },
     { path: "/timeline", name: "timeline", component: TimelineView },
