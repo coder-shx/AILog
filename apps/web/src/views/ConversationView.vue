@@ -18,10 +18,13 @@
                 <span class="badge">{{ conversation.projectName ?? "Unknown Project" }}</span>
                 <span v-if="conversation.favorite" class="badge">favorite</span>
               </div>
-              <h1 class="text-xl font-semibold leading-7">{{ conversation.title }}</h1>
-              <p class="mt-2 text-sm leading-6 text-[#aeb8b3]">{{ conversation.summary }}</p>
+              <input v-model="titleInput" class="input mt-1 max-w-3xl text-lg font-semibold" />
+              <textarea v-model="summaryInput" class="textarea mt-2 max-w-3xl" rows="2" />
             </div>
             <div class="flex flex-wrap gap-2">
+              <button class="btn" @click="saveMeta">
+                <Save :size="16" />
+              </button>
               <button class="btn" @click="toggleFavorite">
                 <Star :size="16" />
               </button>
@@ -37,6 +40,10 @@
                 <FileCode2 :size="16" />
                 HTML
               </button>
+              <button class="btn" @click="exportAs('pdf')">
+                <FileDown :size="16" />
+                PDF
+              </button>
             </div>
           </div>
           <div class="mt-4 flex flex-wrap gap-2">
@@ -48,7 +55,7 @@
           </div>
         </div>
 
-        <MessageBubble v-for="message in conversation.messages" :key="message.id" :message="message" />
+        <MessageBubble v-for="message in conversation.messages" :key="message.id" :message="message" @favorite="favoriteMessage" @tag="tagMessage" />
       </main>
 
       <aside class="panel h-max p-4">
@@ -83,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { Braces, Download, FileCode2, MessageSquare, Star } from "lucide-vue-next";
+import { Braces, Download, FileCode2, FileDown, MessageSquare, Save, Star } from "lucide-vue-next";
 import { computed, defineComponent, h, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import type { AILogConversation, ExportRequest } from "@ailog/shared";
@@ -95,6 +102,8 @@ import { client } from "@/lib/api";
 const route = useRoute();
 const conversation = ref<AILogConversation | null>(null);
 const tagInput = ref("");
+const titleInput = ref("");
+const summaryInput = ref("");
 
 const tools = computed(() => conversation.value?.messages.flatMap((message) => message.toolCalls ?? []) ?? []);
 
@@ -105,6 +114,8 @@ async function load() {
   const id = String(route.params.id);
   conversation.value = await client.conversation(id);
   tagInput.value = conversation.value.tags.join(", ");
+  titleInput.value = conversation.value.title ?? "";
+  summaryInput.value = conversation.value.summary ?? "";
 }
 
 async function saveTags() {
@@ -121,6 +132,23 @@ async function saveTags() {
 async function toggleFavorite() {
   if (!conversation.value) return;
   conversation.value = await client.favorite(conversation.value.id, !conversation.value.favorite);
+}
+
+async function saveMeta() {
+  if (!conversation.value) return;
+  conversation.value = await client.updateConversation(conversation.value.id, { title: titleInput.value, summary: summaryInput.value });
+}
+
+async function favoriteMessage(messageId: string, favorite: boolean) {
+  if (!conversation.value) return;
+  conversation.value = await client.updateMessageState(conversation.value.id, messageId, { favorite });
+}
+
+async function tagMessage(messageId: string, tag: string) {
+  if (!conversation.value) return;
+  const message = conversation.value.messages.find((item) => item.id === messageId);
+  const tags = Array.from(new Set([...(message?.tags ?? []), tag]));
+  conversation.value = await client.updateMessageState(conversation.value.id, messageId, { tags });
 }
 
 async function exportAs(format: ExportRequest["format"]) {

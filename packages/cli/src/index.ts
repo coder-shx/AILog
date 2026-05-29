@@ -26,7 +26,7 @@ async function main(): Promise<void> {
     }
     case "export": {
       const id = stringFlag(args, "--id");
-      if (!id) throw new Error("Usage: ailog export --id <conversation-id> --format markdown|json|html");
+      if (!id) throw new Error("Usage: ailog export --id <conversation-id> --format markdown|json|html|pdf");
       const format = (stringFlag(args, "--format") ?? "markdown") as ExportRequest["format"];
       const output = await repository.exportConversation(id, { format, redact: !args.includes("--no-redact") });
       if (!output) throw new Error(`Conversation not found: ${id}`);
@@ -57,6 +57,10 @@ async function main(): Promise<void> {
     case "backup": {
       const backup = await repository.exportBackup();
       process.stdout.write(backup.content);
+      break;
+    }
+    case "clear-index": {
+      writeJson(await repository.clearIndex());
       break;
     }
     case "capabilities": {
@@ -115,12 +119,13 @@ Commands:
   ailog scan [--dir <path> --provider claude-code|codex-cli|unknown]
   ailog stats
   ailog search "修复 bug" [--limit 20] [--regex]
-  ailog export --id <conversation-id> --format markdown|json|html
-  ailog report weekly|monthly|project
+  ailog export --id <conversation-id> --format markdown|json|html|pdf
+  ailog report weekly|monthly|project|prompts|compare
   ailog privacy
   ailog sqlite
   ailog compare --left <conversation-id> --right <conversation-id>
   ailog backup
+  ailog clear-index
   ailog capabilities
   ailog doctor
   ailog serve

@@ -10,6 +10,7 @@ import type {
   ConversationFilters,
   ExportRequest,
   ExportResult,
+  IndexMaintenanceResult,
   LiveSession,
   OverviewStats,
   PromptLibraryItem,
@@ -49,6 +50,13 @@ export const client = {
   messages: (id: string) => api<AILogMessage[]>(`/api/conversations/${encodeURIComponent(id)}/messages`),
   tags: (id: string, tags: string[]) => api<AILogConversation>(`/api/conversations/${encodeURIComponent(id)}/tags`, { method: "POST", body: JSON.stringify({ tags }) }),
   favorite: (id: string, favorite: boolean) => api<AILogConversation>(`/api/conversations/${encodeURIComponent(id)}/favorite`, { method: "POST", body: JSON.stringify({ favorite }) }),
+  updateConversation: (id: string, input: { title?: string; summary?: string }) =>
+    api<AILogConversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) }),
+  updateMessageState: (conversationId: string, messageId: string, input: { tags?: string[]; favorite?: boolean }) =>
+    api<AILogConversation>(`/api/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/state`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   search: (query: SearchQuery) => api<SearchResult[]>(`/api/search${toQuery(query)}`),
   overview: () => api<OverviewStats>("/api/stats/overview"),
   promptInsight: () => api<PromptInsight>("/api/stats/prompts"),
@@ -67,9 +75,13 @@ export const client = {
     api<ExportResult>(`/api/export/conversation/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify(request) }),
   exportReport: (type: string) => api<ExportResult>("/api/export/report", { method: "POST", body: JSON.stringify({ type, redact: true }) }),
   backup: () => api<{ manifest: BackupManifest; content: string }>("/api/export/backup", { method: "POST", body: JSON.stringify({}) }),
+  restoreBackup: (content: string) => api<BackupManifest>("/api/export/restore", { method: "POST", body: JSON.stringify({ content }) }),
+  clearIndex: () => api<IndexMaintenanceResult>("/api/admin/clear-index", { method: "POST", body: JSON.stringify({}) }),
   liveSessions: () => api<LiveSession[]>("/api/live-sessions"),
   createLiveSession: (session: { cwd?: string; provider?: LiveSession["provider"]; command?: string }) =>
     api<LiveSession>("/api/live-sessions", { method: "POST", body: JSON.stringify(session) }),
+  runLiveSession: (id: string) => api<LiveSession>(`/api/live-sessions/${encodeURIComponent(id)}/run`, { method: "POST", body: JSON.stringify({}) }),
+  stopLiveSession: (id: string) => api<LiveSession>(`/api/live-sessions/${encodeURIComponent(id)}/stop`, { method: "POST", body: JSON.stringify({}) }),
   teamWorkspaces: () => api<TeamWorkspace[]>("/api/team/workspaces"),
   saveTeamWorkspace: (workspace: { name: string; rootPath?: string }) =>
     api<TeamWorkspace>("/api/team/workspaces", { method: "POST", body: JSON.stringify(workspace) }),

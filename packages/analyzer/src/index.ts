@@ -592,6 +592,86 @@ export function renderConversationHtml(conversation: AILogConversation, redact =
   return `<!doctype html><html><head><meta charset="utf-8"><title>${conversation.title ?? conversation.id}</title><style>body{font-family:ui-sans-serif,system-ui;background:#111;color:#eee;max-width:980px;margin:40px auto;line-height:1.6}h1,h2,h3{color:#fff}code,pre{background:#1d1d1d;border:1px solid #333;border-radius:6px;padding:8px}</style></head><body>${body}</body></html>`;
 }
 
+export function renderConversationPdf(conversation: AILogConversation, redact = true): string {
+  const text = renderConversationMarkdown(conversation, redact)
+    .replace(/```[\s\S]*?```/g, (block) => block.split(/\r?\n/).slice(0, 18).join("\n"))
+    .split(/\r?\n/)
+    .map((line) => asciiPdfText(line))
+    .flatMap((line) => wrapPdfLine(line, 92))
+    .slice(0, 160);
+  const pages: string[][] = [];
+  for (let index = 0; index < text.length; index += 42) {
+    pages.push(text.slice(index, index + 42));
+  }
+  if (!pages.length) pages.push(["AILog conversation export"]);
+
+  const objects: string[] = [];
+  const add = (body: string) => {
+    objects.push(body);
+    return objects.length;
+  };
+
+  const catalogId = add("");
+  const pagesId = add("");
+  const fontId = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  const pageIds: number[] = [];
+  const contentIds: number[] = [];
+
+  for (const page of pages) {
+    const content = [
+      "BT",
+      "/F1 10 Tf",
+      "50 792 Td",
+      "14 TL",
+      ...page.map((line) => `(${escapePdfLiteral(line)}) Tj T*`),
+      "ET"
+    ].join("\n");
+    const contentId = add(`<< /Length ${byteLength(content)} >>\nstream\n${content}\nendstream`);
+    const pageId = add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+    contentIds.push(contentId);
+    pageIds.push(pageId);
+  }
+
+  objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+  objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageIds.length} >>`;
+  void contentIds;
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((body, index) => {
+    offsets.push(byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xrefOffset = byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let index = 1; index <= objects.length; index += 1) {
+    pdf += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return pdf;
+}
+
+function asciiPdfText(value: string): string {
+  return value.replace(/[^\x20-\x7E]/g, "?").replace(/\s+/g, " ").trim();
+}
+
+function wrapPdfLine(value: string, length: number): string[] {
+  if (!value) return [""];
+  const lines: string[] = [];
+  for (let index = 0; index < value.length; index += length) {
+    lines.push(value.slice(index, index + length));
+  }
+  return lines;
+}
+
+function escapePdfLiteral(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function byteLength(value: string): number {
+  return value.length;
+}
+
 function intentToTag(intent: PromptIntent): string {
   const map: Record<PromptIntent, string> = {
     bug_fix: "bug-fix",

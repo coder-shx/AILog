@@ -31,7 +31,7 @@ import { Download, FileText } from "lucide-vue-next";
 import { ref } from "vue";
 import { client } from "@/lib/api";
 
-const reportTypes = ["weekly", "monthly", "project"];
+const reportTypes = ["weekly", "monthly", "project", "prompts", "compare"];
 const content = ref("");
 const filename = ref("");
 

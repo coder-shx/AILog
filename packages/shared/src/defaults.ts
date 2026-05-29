@@ -16,7 +16,10 @@ export function defaultSettings(homeDir: string): AILogSettings {
     theme: "dark",
     language: "zh-CN",
     redactExports: true,
-    readOnlySources: true
+    readOnlySources: true,
+    localLlmEndpoint: "",
+    localLlmModel: "llama3.2",
+    localLlmTimeoutMs: 15000
   };
 }
 
@@ -88,4 +91,3 @@ export const TECH_TERMS = [
   "claude",
   "codex"
 ];
-

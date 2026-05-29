@@ -160,6 +160,9 @@ export interface AILogSettings {
   language: "zh-CN" | "en-US";
   redactExports: boolean;
   readOnlySources: boolean;
+  localLlmEndpoint?: string;
+  localLlmModel?: string;
+  localLlmTimeoutMs: number;
 }
 
 export interface ScanResult {
@@ -393,7 +396,7 @@ export interface BackupManifest {
 }
 
 export interface ExportRequest {
-  format: "markdown" | "json" | "html";
+  format: "markdown" | "json" | "html" | "pdf";
   redact?: boolean;
 }
 
@@ -401,6 +404,14 @@ export interface ExportResult {
   filename: string;
   contentType: string;
   content: string;
+}
+
+export interface IndexMaintenanceResult {
+  conversations: number;
+  promptLibraryItems: number;
+  liveSessions: number;
+  teamWorkspaces: number;
+  sqliteRebuilt: boolean;
 }
 
 export interface AILogIndex {

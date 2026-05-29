@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { width: 320px; margin: 0; padding: 14px; font-family: ui-sans-serif, system-ui; color: #e7ece9; background: #101314; }
+      h1 { margin: 0 0 10px; font-size: 15px; }
+      button { width: 100%; margin-top: 8px; border: 1px solid #2a3032; border-radius: 6px; background: #17201e; color: #e7ece9; padding: 9px 10px; cursor: pointer; }
+      button:hover { border-color: #5eead4; }
+      .label { color: #9aa5a0; font-size: 12px; line-height: 1.5; }
+      #status { margin-top: 10px; min-height: 18px; }
+    </style>
+  </head>
+  <body>
+    <h1>AILog Import Helper</h1>
+    <div class="label">Save the current page as a local Markdown conversation import.</div>
+    <button id="save">Download Page Snapshot</button>
+    <button id="open">Open AILog</button>
+    <div id="status" class="label"></div>
+    <script src="./popup.js"></script>
+  </body>
+</html>

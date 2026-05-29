@@ -9,7 +9,7 @@ export interface BuildAppOptions {
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const repository = options.repository ?? new AILogRepository();
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, bodyLimit: 64 * 1024 * 1024 });
   await app.register(cors, { origin: true });
 
   app.get("/api/health", async () => ({
@@ -64,6 +64,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     const body = (request.body ?? {}) as { favorite?: boolean };
     const conversation = await repository.setConversationFavorite(id, Boolean(body.favorite));
     if (!conversation) return reply.code(404).send({ message: "Conversation not found" });
+    return conversation;
+  });
+
+  app.patch("/api/conversations/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const conversation = await repository.updateConversationMeta(id, request.body as { title?: string; summary?: string });
+    if (!conversation) return reply.code(404).send({ message: "Conversation not found" });
+    return conversation;
+  });
+
+  app.post("/api/conversations/:id/messages/:messageId/state", async (request, reply) => {
+    const { id, messageId } = request.params as { id: string; messageId: string };
+    const conversation = await repository.updateMessageState(id, messageId, request.body as { tags?: string[]; favorite?: boolean });
+    if (!conversation) return reply.code(404).send({ message: "Conversation or message not found" });
     return conversation;
   });
 
@@ -157,9 +171,27 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   app.post("/api/export/backup", async () => repository.exportBackup());
+  app.post("/api/export/restore", async (request) => {
+    const body = (request.body ?? {}) as { content?: string };
+    if (!body.content) throw new Error("content is required");
+    return repository.importBackup(body.content);
+  });
+  app.post("/api/admin/clear-index", async () => repository.clearIndex());
 
   app.get("/api/live-sessions", async () => repository.listLiveSessions());
   app.post("/api/live-sessions", async (request) => repository.createLiveSession(request.body as { cwd?: string; provider?: "claude-code" | "codex-cli" | "terminal"; command?: string }));
+  app.post("/api/live-sessions/:id/run", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const session = await repository.runLiveSession(id);
+    if (!session) return reply.code(404).send({ message: "Live session not found" });
+    return session;
+  });
+  app.post("/api/live-sessions/:id/stop", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const session = await repository.stopLiveSession(id);
+    if (!session) return reply.code(404).send({ message: "Live session not found" });
+    return session;
+  });
 
   app.get("/api/team/workspaces", async () => repository.listTeamWorkspaces());
   app.post("/api/team/workspaces", async (request) => repository.saveTeamWorkspace(request.body as { name: string; rootPath?: string }));

@@ -7,7 +7,7 @@
   "engines": {
     "vscode": "^1.90.0"
   },
-  "activationEvents": ["onCommand:ailog.open", "onCommand:ailog.search"],
+  "activationEvents": ["onCommand:ailog.open", "onCommand:ailog.search", "onCommand:ailog.refresh", "onView:ailog.explorer"],
   "main": "./src/extension.js",
   "contributes": {
     "commands": [
@@ -18,7 +18,28 @@
       {
         "command": "ailog.search",
         "title": "AILog: Search Local History"
+      },
+      {
+        "command": "ailog.refresh",
+        "title": "AILog: Refresh Stats"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ailog",
+          "title": "AILog",
+          "icon": "resources/ailog.svg"
+        }
+      ]
+    },
+    "views": {
+      "ailog": [
+        {
+          "id": "ailog.explorer",
+          "name": "Local AI Log"
+        }
+      ]
+    }
   }
 }

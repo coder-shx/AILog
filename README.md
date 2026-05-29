@@ -69,12 +69,12 @@ AILog 是一个本地优先的 AI 协作历史管理与分析工具。它可以�
 | Dashboard | Sessions, prompts, replies, tokens, tools, models, projects, activity heatmap |
 | Prompt Intelligence | Word frequency, language ratio, intent classification, quality scoring |
 | Search | Global search across prompts, replies, tool IO, files, tags, models and projects |
-| Conversation Detail | Markdown rendering, tool panels, tags, favorites, copy, export |
+| Conversation Detail | Markdown rendering, tool panels, editable title/summary, message tags, favorites, copy, export |
 | Compare | Token, tool, file, model, tag and prompt keyword deltas between sessions |
 | Prompt Library | Persist reusable prompts and curate high-quality prompt templates |
 | Privacy Center | Detect keys, tokens, emails, private keys, phone numbers and path leaks |
-| Exports | Markdown, JSON, HTML, weekly/monthly/project reports and full local backup |
-| Integrations | CLI, local API, MCP server scaffold, Tauri, VS Code and browser extension scaffolds |
+| Exports | Markdown, JSON, HTML, PDF, weekly/monthly/project/prompt/compare reports and full local backup |
+| Integrations | CLI, local API, MCP server, Live Sessions, Tauri shell, VS Code sidebar and browser import helper |
 
 ## Screenshots
 
@@ -144,8 +144,8 @@ packages/parser filesystem discovery and provider adapters
 packages/analyzer prompt intelligence, stats, search, redaction
 packages/shared shared TypeScript schema and utilities
 packages/cli    command line interface
-packages/mcp    local stdio MCP server scaffold
-extensions/*    VS Code and browser extension scaffolds
+packages/mcp    local stdio MCP JSON-RPC server
+extensions/*    VS Code sidebar and browser import helper
 ```
 
 ```mermaid
@@ -185,6 +185,10 @@ GET  /api/privacy/sensitive
 GET  /api/prompt-library
 POST /api/export/report
 POST /api/export/backup
+POST /api/export/restore
+POST /api/admin/clear-index
+GET  /api/live-sessions
+POST /api/live-sessions/:id/run
 GET  /api/capabilities
 ```
 
@@ -203,6 +207,7 @@ AILog is designed to be private by default.
 
 - `v1`: verified MVP rollback branch.
 - `v2-final`: final feature branch with stage-two and stage-three capability surfaces.
+- `main`: final delivery branch.
 
 ## Roadmap
 
@@ -210,17 +215,19 @@ AILog is designed to be private by default.
 - [x] Codex and generic import adapters
 - [x] Timeline, Dashboard, Search and Conversation Detail
 - [x] Prompt Intelligence and local quality scoring
-- [x] Markdown, JSON and HTML exports
+- [x] Markdown, JSON, HTML and PDF exports
 - [x] SQLite mirror index
 - [x] Sensitive information scanning
 - [x] Prompt Library persistence
 - [x] Conversation Compare
-- [x] MCP server scaffold
-- [x] Tauri, VS Code and browser extension scaffolds
+- [x] Live Session command transcript capture
+- [x] MCP stdio JSON-RPC tools
+- [x] VS Code sidebar and browser import helper
+- [x] Optional localhost-only LLM summaries
+- [x] Tauri desktop shell scaffold
 - [ ] Real product screenshots and demo video
 - [ ] Packaged desktop installer
 - [ ] Packaged VS Code extension
-- [ ] Optional local LLM semantic summaries
 
 ## Contributing
 

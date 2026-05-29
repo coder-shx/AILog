@@ -6,10 +6,23 @@
         <span v-if="message.model" class="label mono">{{ message.model }}</span>
         <span v-if="message.promptIntent" class="badge">{{ message.promptIntent }}</span>
         <span v-if="message.promptQuality" class="badge">Q {{ message.promptQuality.total }}</span>
+        <span v-if="message.favorite" class="badge">favorite</span>
+        <span v-for="tag in message.tags" :key="tag" class="badge">{{ tag }}</span>
       </div>
-      <button class="btn h-8" @click="copy(message.content)" title="Copy">
-        <Copy :size="14" />
-      </button>
+      <div class="flex flex-wrap gap-2">
+        <button class="btn h-8" @click="$emit('favorite', message.id, !message.favorite)" title="Favorite">
+          <Star :size="14" />
+        </button>
+        <button v-if="message.role === 'user'" class="btn h-8" @click="$emit('tag', message.id, 'high-quality-prompt')" title="Mark high quality">
+          <Sparkles :size="14" />
+        </button>
+        <button class="btn h-8" @click="$emit('tag', message.id, 'reusable')" title="Mark reusable">
+          <Tag :size="14" />
+        </button>
+        <button class="btn h-8" @click="copy(message.content)" title="Copy">
+          <Copy :size="14" />
+        </button>
+      </div>
     </header>
     <div class="message-content" v-html="html"></div>
     <div v-if="message.toolCalls?.length" class="mt-4 grid gap-2">
@@ -26,11 +39,15 @@
 
 <script setup lang="ts">
 import MarkdownIt from "markdown-it";
-import { Copy } from "lucide-vue-next";
+import { Copy, Sparkles, Star, Tag } from "lucide-vue-next";
 import { computed } from "vue";
 import type { AILogMessage } from "@ailog/shared";
 
 const props = defineProps<{ message: AILogMessage }>();
+defineEmits<{
+  favorite: [messageId: string, favorite: boolean];
+  tag: [messageId: string, tag: string];
+}>();
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
 const html = computed(() => md.render(props.message.content || ""));
 

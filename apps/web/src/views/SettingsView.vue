@@ -51,6 +51,20 @@
             <span class="label">Scan interval minutes</span>
             <input v-model.number="settings.scanIntervalMinutes" class="input" type="number" min="1" />
           </label>
+          <div class="mt-4 grid gap-3 md:grid-cols-[1fr_180px_160px]">
+            <label class="grid gap-2">
+              <span class="label">Local LLM endpoint</span>
+              <input v-model="settings.localLlmEndpoint" class="input" placeholder="http://127.0.0.1:11434/api/generate" />
+            </label>
+            <label class="grid gap-2">
+              <span class="label">Model</span>
+              <input v-model="settings.localLlmModel" class="input" placeholder="llama3.2" />
+            </label>
+            <label class="grid gap-2">
+              <span class="label">Timeout ms</span>
+              <input v-model.number="settings.localLlmTimeoutMs" class="input" type="number" min="1000" />
+            </label>
+          </div>
         </div>
       </div>
 
@@ -82,13 +96,28 @@
           <DatabaseZap :size="16" />
           Scan Now
         </button>
+        <div class="mt-5 grid gap-2">
+          <button class="btn w-full" @click="downloadBackup">
+            <Download :size="16" />
+            Backup
+          </button>
+          <button class="btn w-full" @click="restoreInput?.click()">
+            <Upload :size="16" />
+            Restore
+          </button>
+          <input ref="restoreInput" class="hidden" type="file" accept="application/json,.json" @change="restoreBackup" />
+          <button class="btn w-full" @click="clearIndex">
+            <Trash2 :size="16" />
+            Clear Index
+          </button>
+        </div>
       </aside>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { DatabaseZap, RefreshCcw, Save } from "lucide-vue-next";
+import { DatabaseZap, Download, RefreshCcw, Save, Trash2, Upload } from "lucide-vue-next";
 import { computed, defineComponent, h, onMounted, ref } from "vue";
 import type { AILogSettings } from "@ailog/shared";
 import { client } from "@/lib/api";
@@ -96,6 +125,7 @@ import { useAILogStore } from "@/stores/ailog";
 
 const store = useAILogStore();
 const settings = ref<AILogSettings | null>(null);
+const restoreInput = ref<HTMLInputElement | null>(null);
 
 const claudeDirs = computed({
   get: () => settings.value?.claudeDirs.join("\n") ?? "",
@@ -133,6 +163,32 @@ async function save() {
 async function scan() {
   await save();
   await store.scan();
+}
+
+async function downloadBackup() {
+  const backup = await client.backup();
+  const blob = new Blob([backup.content], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `ailog-backup-${backup.manifest.generatedAt.slice(0, 10)}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function restoreBackup(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  await client.restoreBackup(await file.text());
+  await store.bootstrap();
+  await load();
+  if (restoreInput.value) restoreInput.value.value = "";
+}
+
+async function clearIndex() {
+  if (!window.confirm("Clear the local AILog index and prompt library? Source history files are not touched.")) return;
+  await client.clearIndex();
+  await store.bootstrap();
 }
 
 function splitLines(value: string) {

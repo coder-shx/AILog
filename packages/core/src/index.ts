@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -15,6 +16,7 @@ import {
   redactSensitive,
   renderConversationHtml,
   renderConversationMarkdown,
+  renderConversationPdf,
   scanSensitiveFindings,
   searchConversations
 } from "@ailog/analyzer";
@@ -32,6 +34,7 @@ import {
   type ConversationFilters,
   type ExportRequest,
   type ExportResult,
+  type IndexMaintenanceResult,
   type LiveSession,
   type PromptLibraryItem,
   type ProjectInsight,
@@ -70,6 +73,7 @@ export class AILogRepository {
   readonly promptLibraryPath: string;
   readonly liveSessionsPath: string;
   readonly teamWorkspacesPath: string;
+  private readonly liveProcesses = new Map<string, ChildProcessWithoutNullStreams>();
 
   constructor(options: RepositoryOptions = {}) {
     this.workspaceRoot = options.workspaceRoot ?? findWorkspaceRoot(process.cwd());
@@ -168,6 +172,31 @@ export class AILogRepository {
     return conversation;
   }
 
+  async updateConversationMeta(id: string, input: { title?: string; summary?: string }): Promise<AILogConversation | undefined> {
+    const index = await this.loadIndex();
+    const conversation = index.conversations.find((item) => item.id === id);
+    if (!conversation) return undefined;
+    if (input.title !== undefined) conversation.title = input.title.trim() || conversation.title;
+    if (input.summary !== undefined) conversation.summary = input.summary.trim();
+    await this.saveIndex(index.conversations);
+    return conversation;
+  }
+
+  async updateMessageState(
+    conversationId: string,
+    messageId: string,
+    input: { tags?: string[]; favorite?: boolean }
+  ): Promise<AILogConversation | undefined> {
+    const index = await this.loadIndex();
+    const conversation = index.conversations.find((item) => item.id === conversationId);
+    const message = conversation?.messages.find((item) => item.id === messageId);
+    if (!conversation || !message) return undefined;
+    if (input.tags) message.tags = Array.from(new Set(input.tags.map((tag) => tag.trim()).filter(Boolean))).sort();
+    if (input.favorite !== undefined) message.favorite = input.favorite;
+    await this.saveIndex(index.conversations);
+    return conversation;
+  }
+
   async search(query: SearchQuery) {
     const index = await this.loadIndex();
     return searchConversations(index.conversations, query);
@@ -216,6 +245,7 @@ export class AILogRepository {
   }
 
   async promptLibrary() {
+    await this.ensureDataDir();
     const saved = await readJson<PromptLibraryItem[]>(this.promptLibraryPath, []);
     const index = await this.loadIndex();
     const insight = analyzePrompts(index.conversations);
@@ -282,10 +312,12 @@ export class AILogRepository {
   }
 
   async listLiveSessions(): Promise<LiveSession[]> {
+    await this.ensureDataDir();
     return readJson<LiveSession[]>(this.liveSessionsPath, []);
   }
 
   async createLiveSession(input: Partial<LiveSession> & { cwd?: string }): Promise<LiveSession> {
+    await this.ensureDataDir();
     const sessions = await this.listLiveSessions();
     const now = isoNow();
     const session: LiveSession = {
@@ -302,11 +334,96 @@ export class AILogRepository {
     return session;
   }
 
+  async runLiveSession(id: string): Promise<LiveSession | undefined> {
+    await this.ensureDataDir();
+    const sessions = await this.listLiveSessions();
+    const session = sessions.find((item) => item.id === id);
+    if (!session) return undefined;
+    if (!session.command?.trim()) {
+      session.status = "error";
+      session.transcript = [...session.transcript, "No command configured for this live session."];
+      session.updatedAt = isoNow();
+      await this.replaceLiveSession(session);
+      return session;
+    }
+    if (this.liveProcesses.has(id)) return session;
+
+    const cwd = path.isAbsolute(session.cwd) ? session.cwd : path.resolve(this.workspaceRoot, session.cwd);
+    const processCwd = pathExistsSync(cwd) ? cwd : this.workspaceRoot;
+    session.status = "running";
+    session.transcript = [...session.transcript, `$ ${session.command}`].slice(-300);
+    session.updatedAt = isoNow();
+    await this.replaceLiveSession(session);
+
+    const child = spawn(session.command, {
+      cwd: processCwd,
+      shell: true,
+      windowsHide: true,
+      env: { ...process.env, AILOG_LIVE_SESSION: "1" }
+    });
+    this.liveProcesses.set(id, child);
+
+    child.stdout.on("data", (chunk: Buffer) => void this.appendLiveTranscript(id, chunk.toString("utf8")));
+    child.stderr.on("data", (chunk: Buffer) => void this.appendLiveTranscript(id, chunk.toString("utf8")));
+    child.on("error", (error) => {
+      this.liveProcesses.delete(id);
+      void this.appendLiveTranscript(id, error.message, "error");
+    });
+    child.on("close", (code) => {
+      this.liveProcesses.delete(id);
+      void this.appendLiveTranscript(id, `\n[process exited with code ${code ?? "unknown"}]`, code === 0 ? "stopped" : "error");
+    });
+    return session;
+  }
+
+  async stopLiveSession(id: string): Promise<LiveSession | undefined> {
+    const child = this.liveProcesses.get(id);
+    if (child) {
+      child.kill();
+      this.liveProcesses.delete(id);
+    }
+    const session = (await this.listLiveSessions()).find((item) => item.id === id);
+    if (!session) return undefined;
+    session.status = "stopped";
+    session.updatedAt = isoNow();
+    session.transcript = [...session.transcript, "[stopped by user]"].slice(-300);
+    await this.replaceLiveSession(session);
+    return session;
+  }
+
+  private async replaceLiveSession(session: LiveSession): Promise<void> {
+    const sessions = await this.listLiveSessions();
+    await writeJson(
+      this.liveSessionsPath,
+      sessions.map((item) => (item.id === session.id ? session : item))
+    );
+  }
+
+  private async appendLiveTranscript(id: string, chunk: string, status?: LiveSession["status"]): Promise<void> {
+    const sessions = await this.listLiveSessions();
+    const session = sessions.find((item) => item.id === id);
+    if (!session) return;
+    const lines = chunk
+      .replace(/\r/g, "")
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .filter((line) => line.length > 0);
+    session.transcript = [...session.transcript, ...lines].slice(-300);
+    if (status) session.status = status;
+    session.updatedAt = isoNow();
+    await writeJson(
+      this.liveSessionsPath,
+      sessions.map((item) => (item.id === id ? session : item))
+    );
+  }
+
   async listTeamWorkspaces(): Promise<TeamWorkspace[]> {
+    await this.ensureDataDir();
     return readJson<TeamWorkspace[]>(this.teamWorkspacesPath, []);
   }
 
   async saveTeamWorkspace(input: Partial<TeamWorkspace> & { name: string; rootPath?: string }): Promise<TeamWorkspace> {
+    await this.ensureDataDir();
     const workspaces = await this.listTeamWorkspaces();
     const workspace: TeamWorkspace = {
       id: input.id ?? stableId(["team", input.name, input.rootPath ?? this.workspaceRoot]),
@@ -322,6 +439,7 @@ export class AILogRepository {
   }
 
   async capabilities(): Promise<CapabilityStatus[]> {
+    const settings = await this.getSettings();
     return [
       {
         id: "sqlite-index",
@@ -334,10 +452,25 @@ export class AILogRepository {
       {
         id: "mcp-server",
         name: "MCP server",
-        status: "scaffolded",
+        status: "ready",
         localFirst: true,
-        description: "Exposes AILog stats and search through a local stdio MCP server.",
+        description: "Exposes AILog stats and search through a local stdio JSON-RPC MCP server.",
         entry: "packages/mcp/src/index.ts"
+      },
+      {
+        id: "live-sessions",
+        name: "Live sessions",
+        status: "ready",
+        localFirst: true,
+        description: "Creates local session records and can run configured commands while saving transcripts.",
+        entry: "apps/web/src/views/LiveSessionsView.vue"
+      },
+      {
+        id: "pdf-export",
+        name: "PDF export",
+        status: "ready",
+        localFirst: true,
+        description: "Exports single conversations as Markdown, JSON, HTML or lightweight PDF files."
       },
       {
         id: "tauri-desktop",
@@ -350,39 +483,43 @@ export class AILogRepository {
       {
         id: "vscode-extension",
         name: "VS Code extension",
-        status: "scaffolded",
+        status: "ready",
         localFirst: true,
-        description: "Command scaffold for opening AILog and searching local history from VS Code.",
+        description: "Adds commands and a sidebar view for opening, searching and inspecting local AILog stats.",
         entry: "extensions/vscode/package.json"
       },
       {
         id: "browser-extension",
         name: "Browser extension",
-        status: "scaffolded",
+        status: "ready",
         localFirst: true,
-        description: "Manifest V3 extension scaffold for importing exported AI conversations.",
+        description: "Manifest V3 helper for downloading current-page snapshots into an AILog import folder.",
         entry: "extensions/browser/manifest.json"
       },
       {
         id: "local-llm",
         name: "Local LLM analysis",
-        status: "disabled",
+        status: settings.advancedAIAnalysis && settings.localLlmEndpoint ? "configured" : "disabled",
         localFirst: true,
-        description: "Opt-in local endpoint hook. Current summaries use heuristic local extraction."
+        description: "Opt-in local HTTP endpoint for summaries. Only localhost endpoints are accepted."
       }
     ];
   }
 
-  async summarizeConversation(id: string): Promise<{ id: string; summary: string; method: "heuristic" }> {
+  async summarizeConversation(id: string): Promise<{ id: string; summary: string; method: "heuristic" | "local-llm"; fallbackReason?: string }> {
     const conversation = await this.getConversation(id);
     if (!conversation) throw new Error(`Conversation not found: ${id}`);
-    const prompts = conversation.messages.filter((message) => message.role === "user").slice(0, 3).map((message) => message.content);
-    const replies = conversation.messages.filter((message) => message.role === "assistant").slice(-2).map((message) => message.content);
-    return {
-      id,
-      method: "heuristic",
-      summary: redactSensitive([...prompts, ...replies].join("\n\n").replace(/\s+/g, " ").slice(0, 900))
-    };
+    const settings = await this.getSettings();
+    if (settings.advancedAIAnalysis && settings.localLlmEndpoint && isLocalHttpUrl(settings.localLlmEndpoint)) {
+      try {
+        const summary = await summarizeWithLocalLlm(settings, conversation);
+        if (summary) return { id, method: "local-llm", summary: redactSensitive(summary).slice(0, 1400) };
+      } catch (error) {
+        const fallbackReason = error instanceof Error ? error.message : String(error);
+        return { id, method: "heuristic", summary: buildHeuristicSummary(conversation), fallbackReason };
+      }
+    }
+    return { id, method: "heuristic", summary: buildHeuristicSummary(conversation) };
   }
 
   async exportBackup(): Promise<{ manifest: BackupManifest; content: string }> {
@@ -397,6 +534,48 @@ export class AILogRepository {
       settings
     };
     return { manifest, content: JSON.stringify({ manifest, index, library }, null, 2) };
+  }
+
+  async importBackup(content: string): Promise<BackupManifest> {
+    await this.ensureDataDir();
+    const payload = JSON.parse(content) as Partial<{ manifest: BackupManifest; index: AILogIndex; library: PromptLibraryItem[] }>;
+    if (!payload.index || !Array.isArray(payload.index.conversations)) throw new Error("Invalid AILog backup: missing index.conversations");
+    const settings = payload.manifest?.settings ? normalizeSettings(payload.manifest.settings) : await this.getSettings();
+    await this.saveSettings(settings);
+    await this.saveIndex(payload.index.conversations);
+    await writeJson(this.promptLibraryPath, Array.isArray(payload.library) ? payload.library : []);
+    if (settings.useSQLiteIndex) await rebuildSqliteIndex(this.sqlitePath, payload.index.conversations);
+    return {
+      version: payload.manifest?.version ?? 1,
+      generatedAt: isoNow(),
+      conversations: payload.index.conversations.length,
+      promptLibraryItems: Array.isArray(payload.library) ? payload.library.length : 0,
+      settings
+    };
+  }
+
+  async clearIndex(): Promise<IndexMaintenanceResult> {
+    await this.ensureDataDir();
+    const index = await this.loadIndex();
+    const library = await readJson<PromptLibraryItem[]>(this.promptLibraryPath, []);
+    const sessions = await this.listLiveSessions();
+    const workspaces = await this.listTeamWorkspaces();
+    await this.saveIndex([]);
+    await writeJson(this.promptLibraryPath, []);
+    await writeJson(this.liveSessionsPath, []);
+    const settings = await this.getSettings();
+    let sqliteRebuilt = false;
+    if (settings.useSQLiteIndex || pathExistsSync(this.sqlitePath)) {
+      await rebuildSqliteIndex(this.sqlitePath, []);
+      sqliteRebuilt = true;
+    }
+    return {
+      conversations: index.conversations.length,
+      promptLibraryItems: library.length,
+      liveSessions: sessions.length,
+      teamWorkspaces: workspaces.length,
+      sqliteRebuilt
+    };
   }
 
   async exportConversation(id: string, request: ExportRequest): Promise<ExportResult | undefined> {
@@ -418,6 +597,13 @@ export class AILogRepository {
         content: renderConversationHtml(conversation, redact)
       };
     }
+    if (request.format === "pdf") {
+      return {
+        filename: `${safeFilename(conversation.title ?? conversation.id)}.pdf`,
+        contentType: "application/pdf",
+        content: renderConversationPdf(conversation, redact)
+      };
+    }
     return {
       filename: `${safeFilename(conversation.title ?? conversation.id)}.md`,
       contentType: "text/markdown; charset=utf-8",
@@ -430,7 +616,7 @@ export class AILogRepository {
     const overview = computeOverviewStats(index.conversations);
     const prompts = analyzePrompts(index.conversations);
     const projects = computeProjectInsights(index.conversations).slice(0, 8);
-    const title = type === "monthly" ? "AILog Monthly Report" : type === "project" ? "AILog Project Report" : "AILog Weekly Report";
+    const title = reportTitle(type);
     const lines = [
       `# ${title}`,
       "",
@@ -445,6 +631,11 @@ export class AILogRepository {
       `- 平均长度：${prompts.averageLength}`,
       `- 平均质量分：${prompts.qualityAverage?.total ?? 0}`,
       `- 高频词：${prompts.topWords.slice(0, 12).map((item) => `${item.term}(${item.count})`).join(", ") || "N/A"}`,
+      `- 高频技术词：${prompts.topTechTerms.slice(0, 12).map((item) => `${item.term}(${item.count})`).join(", ") || "N/A"}`,
+      "",
+      "## AI Behavior",
+      "",
+      ...behaviorReportLines(index.conversations),
       "",
       "## Projects",
       "",
@@ -487,6 +678,108 @@ export class AILogRepository {
   }
 }
 
+function buildHeuristicSummary(conversation: AILogConversation): string {
+  const prompts = conversation.messages.filter((message) => message.role === "user").slice(0, 3).map((message) => message.content);
+  const replies = conversation.messages.filter((message) => message.role === "assistant").slice(-2).map((message) => message.content);
+  return redactSensitive([...prompts, ...replies].join("\n\n").replace(/\s+/g, " ").slice(0, 900));
+}
+
+function reportTitle(type: string): string {
+  const titles: Record<string, string> = {
+    weekly: "AILog Weekly Report",
+    monthly: "AILog Monthly Report",
+    project: "AILog Project Report",
+    prompts: "AILog Prompt Habits Report",
+    compare: "AILog Claude vs Codex Report"
+  };
+  return titles[type] ?? "AILog Analysis Report";
+}
+
+function behaviorReportLines(conversations: AILogConversation[]): string[] {
+  const behavior = analyzeAIBehavior(conversations);
+  const collaboration = computeCollaborationMetrics(conversations);
+  return [
+    `- AI 回复总数：${behavior.assistantReplies}`,
+    `- 平均回复长度：${behavior.averageReplyLength}`,
+    `- 平均代码块数量：${behavior.averageCodeBlocks}`,
+    `- 工具使用比例：${Math.round(behavior.toolUseRatio * 100)}%`,
+    `- 主动计划比例：${Math.round(behavior.planRatio * 100)}%`,
+    `- 平均每任务轮次：${collaboration.averageTurnsPerTask}`,
+    `- 平均每任务工具调用：${collaboration.averageToolCallsPerTask}`,
+    `- 长上下文会话比例：${Math.round(collaboration.longContextSessionRate * 100)}%`
+  ];
+}
+
+async function summarizeWithLocalLlm(settings: AILogSettings, conversation: AILogConversation): Promise<string | undefined> {
+  const endpoint = settings.localLlmEndpoint?.trim();
+  if (!endpoint) return undefined;
+  const prompt = buildSummaryPrompt(conversation);
+  const isOpenAiCompatible = endpoint.includes("/chat/completions");
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(
+      isOpenAiCompatible
+        ? {
+            model: settings.localLlmModel || "local-model",
+            messages: [
+              { role: "system", content: "Summarize local AI coding conversations concisely. Do not invent facts." },
+              { role: "user", content: prompt }
+            ],
+            temperature: 0.2
+          }
+        : {
+            model: settings.localLlmModel || "llama3.2",
+            prompt,
+            stream: false
+          }
+    ),
+    signal: AbortSignal.timeout(settings.localLlmTimeoutMs || 15000)
+  });
+  if (!response.ok) throw new Error(`Local LLM returned ${response.status}`);
+  return extractLocalLlmText((await response.json()) as Record<string, unknown>);
+}
+
+function buildSummaryPrompt(conversation: AILogConversation): string {
+  const messages = conversation.messages
+    .slice(0, 40)
+    .map((message) => `${message.role}: ${redactSensitive(message.content).replace(/\s+/g, " ").slice(0, 900)}`)
+    .join("\n");
+  return [
+    "请为下面的 AI 编程协作会话生成本地摘要。",
+    "请输出：任务目标、关键决策、涉及文件或工具、错误/重试、可复用经验。",
+    "",
+    `标题：${conversation.title ?? conversation.id}`,
+    `项目：${conversation.projectName ?? "Unknown"}`,
+    messages
+  ].join("\n");
+}
+
+function extractLocalLlmText(data: Record<string, unknown>): string | undefined {
+  if (typeof data.response === "string") return data.response;
+  if (typeof data.output === "string") return data.output;
+  const choices = Array.isArray(data.choices) ? data.choices : [];
+  for (const choice of choices) {
+    const record = choice && typeof choice === "object" ? (choice as Record<string, unknown>) : {};
+    const message = record.message && typeof record.message === "object" ? (record.message as Record<string, unknown>) : {};
+    if (typeof message.content === "string") return message.content;
+    if (typeof record.text === "string") return record.text;
+  }
+  return undefined;
+}
+
+function isLocalHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1" || url.hostname.endsWith(".localhost"))
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function rootsFromSettings(settings: AILogSettings): Array<{ path: string; provider: Provider }> {
   return [
     ...settings.claudeDirs.map((sourcePath) => ({ path: expandHome(sourcePath), provider: "claude-code" as const })),
@@ -519,7 +812,10 @@ function normalizeSettings(settings: AILogSettings): AILogSettings {
     claudeDirs: normalizePathList(settings.claudeDirs),
     codexDirs: normalizePathList(settings.codexDirs),
     importDirs: normalizePathList(settings.importDirs),
-    scanIntervalMinutes: Number.isFinite(settings.scanIntervalMinutes) ? Math.max(1, settings.scanIntervalMinutes) : 15
+    scanIntervalMinutes: Number.isFinite(settings.scanIntervalMinutes) ? Math.max(1, settings.scanIntervalMinutes) : 15,
+    localLlmEndpoint: settings.localLlmEndpoint?.trim() ?? "",
+    localLlmModel: settings.localLlmModel?.trim() || "llama3.2",
+    localLlmTimeoutMs: Number.isFinite(settings.localLlmTimeoutMs) ? Math.max(1000, settings.localLlmTimeoutMs) : 15000
   };
 }
 
