@@ -69,8 +69,9 @@ export async function rebuildSqliteIndex(dbPath: string, conversations: AILogCon
         );
         for (const tool of message.toolCalls ?? []) {
           toolCalls += 1;
+          const toolRowId = `${conversation.id}:${message.id}:${tool.id}:${toolCalls}`;
           insertTool.run(
-            tool.id,
+            toolRowId,
             conversation.id,
             message.id,
             tool.name,
