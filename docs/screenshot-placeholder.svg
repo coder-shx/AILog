@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-label="AILog screenshot placeholder">
+  <rect width="1280" height="720" fill="#0d0f10"/>
+  <rect x="36" y="36" width="244" height="648" rx="8" fill="#151819" stroke="#2b3132"/>
+  <rect x="304" y="36" width="940" height="72" rx="8" fill="#151819" stroke="#2b3132"/>
+  <rect x="304" y="132" width="216" height="118" rx="8" fill="#151819" stroke="#2b3132"/>
+  <rect x="540" y="132" width="216" height="118" rx="8" fill="#151819" stroke="#2b3132"/>
+  <rect x="776" y="132" width="216" height="118" rx="8" fill="#151819" stroke="#2b3132"/>
+  <rect x="1016" y="132" width="228" height="118" rx="8" fill="#151819" stroke="#2b3132"/>
+  <rect x="304" y="274" width="600" height="410" rx="8" fill="#151819" stroke="#2b3132"/>
+  <rect x="928" y="274" width="316" height="410" rx="8" fill="#151819" stroke="#2b3132"/>
+  <circle cx="84" cy="86" r="16" fill="#5ee08e"/>
+  <text x="112" y="94" fill="#f4f4f1" font-family="Segoe UI, sans-serif" font-size="24" font-weight="700">AILog</text>
+  <text x="344" y="84" fill="#9da5a2" font-family="Segoe UI, sans-serif" font-size="22">Local AI collaboration dashboard</text>
+  <path d="M344 600 C430 490 520 570 610 430 C700 290 760 370 858 238" fill="none" stroke="#5ee08e" stroke-width="5"/>
+  <text x="344" y="190" fill="#f4f4f1" font-family="Consolas, monospace" font-size="36">42</text>
+  <text x="580" y="190" fill="#f4f4f1" font-family="Consolas, monospace" font-size="36">1.2M</text>
+  <text x="816" y="190" fill="#f4f4f1" font-family="Consolas, monospace" font-size="36">314</text>
+  <text x="1056" y="190" fill="#f4f4f1" font-family="Consolas, monospace" font-size="36">Codex</text>
+</svg>

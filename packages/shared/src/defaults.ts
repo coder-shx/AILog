@@ -1,0 +1,91 @@
+import type { AILogSettings } from "./types";
+
+export function defaultSettings(homeDir: string): AILogSettings {
+  return {
+    claudeDirs: [`${homeDir}/.claude`],
+    codexDirs: [`${homeDir}/.codex`, `${homeDir}/.config/codex`, `${homeDir}/AppData/Roaming/Codex`],
+    importDirs: [],
+    autoScan: false,
+    scanIntervalMinutes: 15,
+    useSQLiteIndex: false,
+    fullTextSearch: true,
+    sensitiveScan: true,
+    autoTagging: true,
+    promptQualityScoring: true,
+    advancedAIAnalysis: false,
+    theme: "dark",
+    language: "zh-CN",
+    redactExports: true,
+    readOnlySources: true
+  };
+}
+
+export const SUPPORTED_EXTENSIONS = new Set([".json", ".jsonl", ".md", ".markdown", ".txt", ".log"]);
+
+export const STOP_WORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "this",
+  "that",
+  "from",
+  "into",
+  "have",
+  "has",
+  "are",
+  "was",
+  "were",
+  "can",
+  "could",
+  "should",
+  "please",
+  "帮我",
+  "一下",
+  "这个",
+  "一个",
+  "可以",
+  "需要",
+  "进行",
+  "如何",
+  "请你",
+  "请帮"
+]);
+
+export const TECH_TERMS = [
+  "vue",
+  "react",
+  "svelte",
+  "angular",
+  "vite",
+  "webpack",
+  "typescript",
+  "javascript",
+  "node",
+  "fastify",
+  "express",
+  "sqlite",
+  "postgres",
+  "mysql",
+  "prisma",
+  "drizzle",
+  "tailwind",
+  "pinia",
+  "redux",
+  "vitest",
+  "jest",
+  "playwright",
+  "docker",
+  "kubernetes",
+  "tauri",
+  "electron",
+  "python",
+  "java",
+  "go",
+  "rust",
+  "mcp",
+  "openai",
+  "claude",
+  "codex"
+];
+

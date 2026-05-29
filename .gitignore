@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.turbo/
+.vite/
+.ailog/
+coverage/
+*.log
+.DS_Store
+Thumbs.db
+

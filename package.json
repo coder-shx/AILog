@@ -1,0 +1,28 @@
+{
+  "name": "ailog",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Your local AI collaboration logbook.",
+  "type": "module",
+  "scripts": {
+    "dev": "corepack pnpm --parallel --stream --filter @ailog/server --filter @ailog/web dev",
+    "build": "corepack pnpm --recursive build",
+    "typecheck": "corepack pnpm --recursive typecheck",
+    "lint": "corepack pnpm typecheck",
+    "scan": "corepack pnpm --filter @ailog/cli ailog scan",
+    "stats": "corepack pnpm --filter @ailog/cli ailog stats"
+  },
+  "keywords": [
+    "ai",
+    "claude-code",
+    "codex",
+    "prompt-analytics",
+    "local-first"
+  ],
+  "license": "MIT",
+  "packageManager": "pnpm@9.15.4",
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}
