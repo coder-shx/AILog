@@ -1,36 +1,86 @@
 # AILog
 
-Your local AI collaboration logbook.
+<p align="center">
+  <img src="docs/screenshot-placeholder.svg" alt="AILog preview" width="880">
+</p>
 
-Browse your Claude Code and Codex history like Git commits.  
-Analyze your prompts like product analytics.  
-Keep everything local and private.
+<p align="center">
+  <strong>Your local AI collaboration logbook.</strong>
+</p>
+
+<p align="center">
+  Browse Claude Code and Codex history like Git commits.<br>
+  Analyze prompts like product analytics.<br>
+  Keep everything local and private.
+</p>
+
+<p align="center">
+  <a href="https://github.com/coder-shx/AILog/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/coder-shx/AILog?style=flat-square"></a>
+  <a href="https://github.com/coder-shx/AILog/network/members"><img alt="GitHub forks" src="https://img.shields.io/github/forks/coder-shx/AILog?style=flat-square"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/coder-shx/AILog?style=flat-square"></a>
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square">
+  <img alt="Vue" src="https://img.shields.io/badge/Vue-3-42b883?style=flat-square">
+  <img alt="Fastify" src="https://img.shields.io/badge/Fastify-local_API-202020?style=flat-square">
+  <img alt="Local first" src="https://img.shields.io/badge/local--first-yes-5ee08e?style=flat-square">
+</p>
+
+<p align="center">
+  <a href="#why-ailog">Why</a>
+  ·
+  <a href="#features">Features</a>
+  ·
+  <a href="#quick-start">Quick Start</a>
+  ·
+  <a href="#cli">CLI</a>
+  ·
+  <a href="#architecture">Architecture</a>
+  ·
+  <a href="#privacy">Privacy</a>
+  ·
+  <a href="#roadmap">Roadmap</a>
+</p>
+
+## Why AILog
 
 AILog is local-first observability for your AI coding workflow.
 
+Most AI coding tools produce valuable collaboration history, but that history is hard to search, compare, measure, and reuse. AILog turns local Claude Code, Codex CLI, and exported AI conversations into a developer-grade timeline, dashboard, search engine, prompt intelligence system, and exportable knowledge base.
+
+中文简介：
+
 AILog 是一个本地优先的 AI 协作历史管理与分析工具。它可以帮助你浏览、搜索、分析 Claude Code 和 Codex 的历史对话，像看 Git 日志一样回顾 AI 协作过程，像看数据仪表盘一样理解自己的 Prompt 习惯和 AI 行为模式。
 
-![AILog screenshot placeholder](docs/screenshot-placeholder.svg)
+## What It Helps You Answer
+
+- What do I ask AI to do most often?
+- Which prompts cost the most tokens?
+- Which projects rely on AI the most?
+- Which model works better for my workflow?
+- Which task types fail or require retries?
+- Which prompts are good enough to reuse?
+- Which files does AI repeatedly inspect or modify?
+- How did my AI coding habits change over time?
 
 ## Features
 
-- Git-log style Timeline for Claude Code, Codex CLI and imported AI conversations.
-- Local Fastify API server with filesystem scanning and JSON index storage.
-- Unified conversation schema across Claude JSONL, Codex/JSON/JSONL, Markdown and text exports.
-- Dashboard metrics for sessions, messages, prompts, replies, tokens, tools, models, projects and activity.
-- Prompt Intelligence: word frequency, language ratio, intent classification and heuristic quality scoring.
-- Conversation detail view with Markdown rendering, tool call panels, tags, favorites and export.
-- Global search across titles, prompts, replies, tool input/output, files, tags, models and projects.
-- Markdown / JSON / HTML exports with sensitive data redaction enabled by default.
-- Local-first settings for Claude directories, Codex directories, import directories and privacy controls.
-- CLI commands for scan, stats, search, export, report and doctor.
-- SQLite mirror index using Node's local `node:sqlite` runtime when enabled.
-- Conversation Compare API with token, tool, file, model, tag and prompt keyword deltas.
-- Sensitive information center for keys, tokens, emails, phone numbers, private keys and path leaks.
-- Prompt Library persistence for reusable prompts and template curation.
-- Live Session tracker for Claude, Codex and terminal workflows.
-- Local team workspace metadata for local-first collaboration.
-- MCP server, Tauri desktop, VS Code extension and browser extension scaffolds.
+| Area | What AILog Provides |
+| --- | --- |
+| Timeline | Git-log style browsing for local AI collaboration history |
+| Dashboard | Sessions, prompts, replies, tokens, tools, models, projects, activity heatmap |
+| Prompt Intelligence | Word frequency, language ratio, intent classification, quality scoring |
+| Search | Global search across prompts, replies, tool IO, files, tags, models and projects |
+| Conversation Detail | Markdown rendering, tool panels, tags, favorites, copy, export |
+| Compare | Token, tool, file, model, tag and prompt keyword deltas between sessions |
+| Prompt Library | Persist reusable prompts and curate high-quality prompt templates |
+| Privacy Center | Detect keys, tokens, emails, private keys, phone numbers and path leaks |
+| Exports | Markdown, JSON, HTML, weekly/monthly/project reports and full local backup |
+| Integrations | CLI, local API, MCP server scaffold, Tauri, VS Code and browser extension scaffolds |
+
+## Screenshots
+
+> The current repository includes a screenshot placeholder. Replace it with real product screenshots before launch.
+
+![AILog dashboard](docs/screenshot-placeholder.svg)
 
 ## Quick Start
 
@@ -39,8 +89,10 @@ pnpm install
 pnpm dev
 ```
 
-The web console runs at `http://127.0.0.1:1420`.  
-The API server runs at `http://127.0.0.1:1421`.
+Open:
+
+- Web console: `http://127.0.0.1:1420`
+- Local API: `http://127.0.0.1:1421`
 
 If `pnpm` is not installed:
 
@@ -49,12 +101,19 @@ corepack enable
 corepack prepare pnpm@9.15.4 --activate
 ```
 
+On Windows machines where PowerShell cannot find the `pnpm` shim, use:
+
+```bash
+corepack pnpm install
+corepack pnpm dev
+```
+
 ## CLI
 
 ```bash
 pnpm --filter @ailog/cli ailog scan
 pnpm --filter @ailog/cli ailog stats
-pnpm --filter @ailog/cli ailog search "修复 bug"
+pnpm --filter @ailog/cli ailog search "fix bug"
 pnpm --filter @ailog/cli ailog export --id <conversation-id> --format markdown
 pnpm --filter @ailog/cli ailog report weekly
 pnpm --filter @ailog/cli ailog privacy
@@ -69,100 +128,143 @@ pnpm --filter @ailog/cli ailog doctor
 - Claude Code JSONL history under `~/.claude/`
 - Codex CLI history directories configured by the user
 - Generic `.json`, `.jsonl`, `.md`, `.markdown`, `.txt`, `.log`
-- OpenAI / Anthropic / Gemini shaped API exports through generic adapters
+- OpenAI, Anthropic and Gemini shaped API exports through generic adapters
+- SSE stream logs through the stream adapter
 
-Unknown formats are intentionally routed through adapter interfaces so new parsers can be added without changing the UI or data model.
+Unknown formats are routed through adapter interfaces so new parsers can be added without coupling the UI to provider-specific records.
 
 ## Architecture
 
 ```txt
-apps/web       Vue 3 + Vite local console
-apps/server    Fastify REST API
-packages/core  local settings, index, scan orchestration and exports
+apps/web        Vue 3 + Vite local console
+apps/server     Fastify REST API
+apps/desktop    Tauri shell scaffold
+packages/core   settings, local index, scan orchestration, exports
 packages/parser filesystem discovery and provider adapters
-packages/analyzer prompt intelligence, stats, search and redaction
+packages/analyzer prompt intelligence, stats, search, redaction
 packages/shared shared TypeScript schema and utilities
-packages/cli   command line interface
-packages/mcp   local stdio MCP server scaffold
-apps/desktop   Tauri shell scaffold
-extensions/*   VS Code and browser extension scaffolds
+packages/cli    command line interface
+packages/mcp    local stdio MCP server scaffold
+extensions/*    VS Code and browser extension scaffolds
 ```
 
-AILog stores its generated local index in `.ailog/index.json` and settings in `.ailog/settings.json`. Source history files are scanned read-only.
+```mermaid
+flowchart LR
+  A["Claude / Codex / exports"] --> B["Parser adapters"]
+  B --> C["Unified conversation schema"]
+  C --> D["Analyzer enrichment"]
+  D --> E[".ailog/index.json"]
+  E --> F["Fastify API"]
+  F --> G["Vue console"]
+  E --> H["CLI"]
+  E --> I["SQLite mirror"]
+  E --> J["MCP server"]
+```
 
-## API
+AILog stores generated state locally:
 
-The API follows the MVP contract from the product prompt:
+- Settings: `.ailog/settings.json`
+- JSON index: `.ailog/index.json`
+- Optional SQLite mirror: `.ailog/index.sqlite`
+- Prompt library: `.ailog/prompt-library.json`
 
-- `GET /api/health`
-- `GET /api/settings`
-- `POST /api/settings`
-- `POST /api/scan`
-- `GET /api/projects`
-- `GET /api/conversations`
-- `GET /api/conversations/:id`
-- `GET /api/conversations/:id/messages`
-- `POST /api/conversations/:id/tags`
-- `POST /api/conversations/:id/favorite`
-- `GET /api/search`
-- `GET /api/stats/overview`
-- `GET /api/stats/prompts`
-- `GET /api/stats/tools`
-- `GET /api/stats/models`
-- `GET /api/stats/projects`
-- `GET /api/stats/timeline`
-- `GET /api/stats/ai-behavior`
-- `GET /api/stats/collaboration`
-- `GET /api/compare`
-- `GET /api/privacy/sensitive`
-- `GET /api/sqlite/status`
-- `POST /api/sqlite/rebuild`
-- `GET /api/prompts`
-- `GET /api/prompts/:id`
-- `POST /api/prompts/:id/favorite`
-- `GET /api/prompt-library`
-- `POST /api/prompt-library`
-- `POST /api/export/conversation/:id`
-- `POST /api/export/report`
-- `POST /api/export/backup`
-- `GET /api/live-sessions`
-- `POST /api/live-sessions`
-- `GET /api/team/workspaces`
-- `POST /api/team/workspaces`
-- `GET /api/capabilities`
-- `POST /api/conversations/:id/summary`
+## API Highlights
+
+```txt
+GET  /api/health
+POST /api/scan
+GET  /api/conversations
+GET  /api/conversations/:id
+GET  /api/search
+GET  /api/stats/overview
+GET  /api/stats/prompts
+GET  /api/stats/ai-behavior
+GET  /api/stats/collaboration
+GET  /api/compare
+GET  /api/privacy/sensitive
+GET  /api/prompt-library
+POST /api/export/report
+POST /api/export/backup
+GET  /api/capabilities
+```
 
 ## Privacy
 
-- AILog runs locally by default.
-- It does not upload conversation data.
-- It does not call remote LLMs for analysis.
-- Exports redact API keys, GitHub tokens, JWTs, SSH private keys, emails, phone numbers and common path secrets by default.
-- Source files are scanned in read-only mode.
+AILog is designed to be private by default.
 
-## Branch Strategy
+- Runs locally.
+- Does not upload conversation data.
+- Does not call remote LLMs for analysis by default.
+- Scans source history files read-only.
+- Redacts API keys, GitHub tokens, JWTs, SSH private keys, emails, phone numbers and path secrets on export.
+- Keeps generated state under `.ailog/`.
+
+## Branches
 
 - `v1`: verified MVP rollback branch.
-- `v2-final`: final-version development branch with stage-two and stage-three capabilities.
+- `v2-final`: final feature branch with stage-two and stage-three capability surfaces.
 
-## Final-Version Scope
+## Roadmap
 
-The final branch includes all staged surfaces from the prompt in a local-first form. Capabilities that require external tools, browser packaging, VS Code packaging, Tauri build chains, or an actual local LLM runtime are provided as runnable scaffolds and opt-in API surfaces rather than hidden remote integrations.
-
-## Remaining Packaging Work
-
-- Build native Tauri installers after installing the Rust/Tauri toolchain.
-- Package the VS Code extension with `vsce`.
-- Load `extensions/browser` as an unpacked Manifest V3 extension.
-- Wire a chosen local LLM endpoint in Settings if automatic semantic summaries are desired.
+- [x] Claude Code JSONL scanning
+- [x] Codex and generic import adapters
+- [x] Timeline, Dashboard, Search and Conversation Detail
+- [x] Prompt Intelligence and local quality scoring
+- [x] Markdown, JSON and HTML exports
+- [x] SQLite mirror index
+- [x] Sensitive information scanning
+- [x] Prompt Library persistence
+- [x] Conversation Compare
+- [x] MCP server scaffold
+- [x] Tauri, VS Code and browser extension scaffolds
+- [ ] Real product screenshots and demo video
+- [ ] Packaged desktop installer
+- [ ] Packaged VS Code extension
+- [ ] Optional local LLM semantic summaries
 
 ## Contributing
 
-1. Keep features local-first by default.
-2. Add parser adapters instead of coupling UI code to provider-specific history formats.
-3. Keep sensitive data redaction on for new export paths.
-4. Run `pnpm typecheck` before submitting changes.
+Contributions are welcome. The main rule is simple: keep AILog local-first unless the user explicitly opts into an external integration.
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Add parser adapters instead of hard-coding provider formats in UI code.
+4. Keep redaction enabled for new export paths.
+5. Run checks before opening a pull request.
+
+```bash
+pnpm typecheck
+pnpm build
+```
+
+## Development
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Useful package commands:
+
+```bash
+pnpm --filter @ailog/server dev
+pnpm --filter @ailog/web dev
+pnpm --filter @ailog/mcp start
+pnpm --filter @ailog/cli ailog doctor
+```
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
+
+## Star History
+
+If AILog helps you understand your AI coding workflow, consider starring the project.
+
+<a href="https://star-history.com/#coder-shx/AILog&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=coder-shx/AILog&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=coder-shx/AILog&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=coder-shx/AILog&type=Date" />
+  </picture>
+</a>
