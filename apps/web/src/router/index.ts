@@ -9,6 +9,9 @@ import CompareView from "@/views/CompareView.vue";
 import PromptLibraryView from "@/views/PromptLibraryView.vue";
 import ReportsView from "@/views/ReportsView.vue";
 import SettingsView from "@/views/SettingsView.vue";
+import PrivacyView from "@/views/PrivacyView.vue";
+import LiveSessionsView from "@/views/LiveSessionsView.vue";
+import CapabilitiesView from "@/views/CapabilitiesView.vue";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -22,6 +25,9 @@ export const router = createRouter({
     { path: "/compare", name: "compare", component: CompareView },
     { path: "/library", name: "library", component: PromptLibraryView },
     { path: "/reports", name: "reports", component: ReportsView },
+    { path: "/privacy", name: "privacy", component: PrivacyView },
+    { path: "/live", name: "live", component: LiveSessionsView },
+    { path: "/capabilities", name: "capabilities", component: CapabilitiesView },
     { path: "/settings", name: "settings", component: SettingsView }
   ]
 });

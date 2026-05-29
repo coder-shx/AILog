@@ -2,15 +2,24 @@ import type {
   AILogConversation,
   AILogMessage,
   AILogSettings,
+  AIBehaviorInsight,
+  BackupManifest,
+  CapabilityStatus,
+  CollaborationMetrics,
+  ConversationCompareResult,
   ConversationFilters,
   ExportRequest,
   ExportResult,
+  LiveSession,
   OverviewStats,
+  PromptLibraryItem,
   ProjectInsight,
   PromptInsight,
   ScanResult,
   SearchQuery,
-  SearchResult
+  SearchResult,
+  SensitiveFinding,
+  TeamWorkspace
 } from "@ailog/shared";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:1421";
@@ -43,12 +52,28 @@ export const client = {
   search: (query: SearchQuery) => api<SearchResult[]>(`/api/search${toQuery(query)}`),
   overview: () => api<OverviewStats>("/api/stats/overview"),
   promptInsight: () => api<PromptInsight>("/api/stats/prompts"),
+  aiBehavior: () => api<AIBehaviorInsight>("/api/stats/ai-behavior"),
+  collaboration: () => api<CollaborationMetrics>("/api/stats/collaboration"),
   projects: () => api<ProjectInsight[]>("/api/stats/projects"),
+  compare: (leftId: string, rightId: string) => api<ConversationCompareResult>(`/api/compare${toQuery({ leftId, rightId })}`),
+  sensitive: () => api<SensitiveFinding[]>("/api/privacy/sensitive"),
+  sqliteStatus: () => api<Record<string, unknown>>("/api/sqlite/status"),
+  capabilities: () => api<CapabilityStatus[]>("/api/capabilities"),
   prompts: () => api<Array<AILogMessage & { conversationTitle?: string; projectName?: string }>>("/api/prompts"),
-  promptLibrary: () => api<Array<Record<string, unknown>>>("/api/prompt-library"),
+  promptLibrary: () => api<PromptLibraryItem[]>("/api/prompt-library"),
+  savePromptLibrary: (item: { title?: string; content: string; tags?: string[]; group?: string }) =>
+    api<PromptLibraryItem>("/api/prompt-library", { method: "POST", body: JSON.stringify(item) }),
   exportConversation: (id: string, request: ExportRequest) =>
     api<ExportResult>(`/api/export/conversation/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify(request) }),
-  exportReport: (type: string) => api<ExportResult>("/api/export/report", { method: "POST", body: JSON.stringify({ type, redact: true }) })
+  exportReport: (type: string) => api<ExportResult>("/api/export/report", { method: "POST", body: JSON.stringify({ type, redact: true }) }),
+  backup: () => api<{ manifest: BackupManifest; content: string }>("/api/export/backup", { method: "POST", body: JSON.stringify({}) }),
+  liveSessions: () => api<LiveSession[]>("/api/live-sessions"),
+  createLiveSession: (session: { cwd?: string; provider?: LiveSession["provider"]; command?: string }) =>
+    api<LiveSession>("/api/live-sessions", { method: "POST", body: JSON.stringify(session) }),
+  teamWorkspaces: () => api<TeamWorkspace[]>("/api/team/workspaces"),
+  saveTeamWorkspace: (workspace: { name: string; rootPath?: string }) =>
+    api<TeamWorkspace>("/api/team/workspaces", { method: "POST", body: JSON.stringify(workspace) }),
+  summarize: (id: string) => api<{ id: string; summary: string; method: string }>(`/api/conversations/${encodeURIComponent(id)}/summary`, { method: "POST", body: JSON.stringify({}) })
 };
 
 function toQuery(value: object): string {

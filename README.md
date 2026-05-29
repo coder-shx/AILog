@@ -24,6 +24,13 @@ AILog 是一个本地优先的 AI 协作历史管理与分析工具。它可以�
 - Markdown / JSON / HTML exports with sensitive data redaction enabled by default.
 - Local-first settings for Claude directories, Codex directories, import directories and privacy controls.
 - CLI commands for scan, stats, search, export, report and doctor.
+- SQLite mirror index using Node's local `node:sqlite` runtime when enabled.
+- Conversation Compare API with token, tool, file, model, tag and prompt keyword deltas.
+- Sensitive information center for keys, tokens, emails, phone numbers, private keys and path leaks.
+- Prompt Library persistence for reusable prompts and template curation.
+- Live Session tracker for Claude, Codex and terminal workflows.
+- Local team workspace metadata for local-first collaboration.
+- MCP server, Tauri desktop, VS Code extension and browser extension scaffolds.
 
 ## Quick Start
 
@@ -50,6 +57,10 @@ pnpm --filter @ailog/cli ailog stats
 pnpm --filter @ailog/cli ailog search "修复 bug"
 pnpm --filter @ailog/cli ailog export --id <conversation-id> --format markdown
 pnpm --filter @ailog/cli ailog report weekly
+pnpm --filter @ailog/cli ailog privacy
+pnpm --filter @ailog/cli ailog sqlite
+pnpm --filter @ailog/cli ailog backup
+pnpm --filter @ailog/cli ailog capabilities
 pnpm --filter @ailog/cli ailog doctor
 ```
 
@@ -72,6 +83,9 @@ packages/parser filesystem discovery and provider adapters
 packages/analyzer prompt intelligence, stats, search and redaction
 packages/shared shared TypeScript schema and utilities
 packages/cli   command line interface
+packages/mcp   local stdio MCP server scaffold
+apps/desktop   Tauri shell scaffold
+extensions/*   VS Code and browser extension scaffolds
 ```
 
 AILog stores its generated local index in `.ailog/index.json` and settings in `.ailog/settings.json`. Source history files are scanned read-only.
@@ -97,6 +111,12 @@ The API follows the MVP contract from the product prompt:
 - `GET /api/stats/models`
 - `GET /api/stats/projects`
 - `GET /api/stats/timeline`
+- `GET /api/stats/ai-behavior`
+- `GET /api/stats/collaboration`
+- `GET /api/compare`
+- `GET /api/privacy/sensitive`
+- `GET /api/sqlite/status`
+- `POST /api/sqlite/rebuild`
 - `GET /api/prompts`
 - `GET /api/prompts/:id`
 - `POST /api/prompts/:id/favorite`
@@ -104,6 +124,13 @@ The API follows the MVP contract from the product prompt:
 - `POST /api/prompt-library`
 - `POST /api/export/conversation/:id`
 - `POST /api/export/report`
+- `POST /api/export/backup`
+- `GET /api/live-sessions`
+- `POST /api/live-sessions`
+- `GET /api/team/workspaces`
+- `POST /api/team/workspaces`
+- `GET /api/capabilities`
+- `POST /api/conversations/:id/summary`
 
 ## Privacy
 
@@ -113,16 +140,21 @@ The API follows the MVP contract from the product prompt:
 - Exports redact API keys, GitHub tokens, JWTs, SSH private keys, emails, phone numbers and common path secrets by default.
 - Source files are scanned in read-only mode.
 
-## Roadmap
+## Branch Strategy
 
-- SQLite / Drizzle index backend.
-- Stronger Codex format adapters and SSE stream parsing.
-- Conversation compare API with structural diffs.
-- Prompt Library persistence and template generation.
-- Weekly/monthly report scheduling.
-- Tauri desktop shell.
-- Local LLM summaries behind an explicit opt-in switch.
-- MCP server and VS Code extension.
+- `v1`: verified MVP rollback branch.
+- `v2-final`: final-version development branch with stage-two and stage-three capabilities.
+
+## Final-Version Scope
+
+The final branch includes all staged surfaces from the prompt in a local-first form. Capabilities that require external tools, browser packaging, VS Code packaging, Tauri build chains, or an actual local LLM runtime are provided as runnable scaffolds and opt-in API surfaces rather than hidden remote integrations.
+
+## Remaining Packaging Work
+
+- Build native Tauri installers after installing the Rust/Tauri toolchain.
+- Package the VS Code extension with `vsce`.
+- Load `extensions/browser` as an unpacked Manifest V3 extension.
+- Wire a chosen local LLM endpoint in Settings if automatic semantic summaries are desired.
 
 ## Contributing
 

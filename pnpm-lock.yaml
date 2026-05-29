@@ -15,6 +15,8 @@ importers:
         specifier: ^5.7.3
         version: 5.9.3
 
+  apps/desktop: {}
+
   apps/server:
     dependencies:
       '@ailog/core':
@@ -113,6 +115,16 @@ importers:
       '@ailog/shared':
         specifier: workspace:*
         version: link:../shared
+
+  packages/mcp:
+    dependencies:
+      '@ailog/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.3
 
   packages/parser:
     dependencies:

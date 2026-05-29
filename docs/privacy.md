@@ -29,3 +29,10 @@ The analyzer redacts:
 - Index: `.ailog/index.json`
 
 Delete `.ailog/` to clear generated local state. This does not touch Claude Code or Codex source history.
+
+## Final Version Privacy Surfaces
+
+- `GET /api/privacy/sensitive` returns local sensitive finding records.
+- `POST /api/export/backup` exports local generated state as JSON.
+- `GET /api/capabilities` shows which integrations are ready, scaffolded or disabled.
+- Local LLM analysis is represented as an opt-in capability. The current summary endpoint uses heuristic extraction and does not call any remote model.

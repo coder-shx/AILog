@@ -161,7 +161,7 @@ export async function scanSources(options: ScanOptions): Promise<{ result: ScanR
 }
 
 export function defaultAdapters(): ParserAdapter[] {
-  return [new ClaudeJsonlAdapter(), new GenericJsonlAdapter(), new GenericJsonAdapter(), new MarkdownTextAdapter()];
+  return [new ClaudeJsonlAdapter(), new CodexJsonlAdapter(), new SseStreamAdapter(), new GenericJsonlAdapter(), new GenericJsonAdapter(), new MarkdownTextAdapter()];
 }
 
 export class ClaudeJsonlAdapter implements ParserAdapter {
@@ -239,6 +239,163 @@ export class GenericJsonlAdapter implements ParserAdapter {
       groups.set(sessionId, group);
     }
     return Array.from(groups.entries()).map(([sessionId, group]) => buildConversationFromRows(filePath, provider, sessionId, group, context, this.name));
+  }
+}
+
+export class CodexJsonlAdapter implements ParserAdapter {
+  name = "codex-jsonl";
+
+  canParse(filePath: string, content: string, context?: ParseContext): boolean {
+    if (path.extname(filePath).toLowerCase() !== ".jsonl") return false;
+    if (context?.provider === "codex-cli") return true;
+    const sample = content.slice(0, 12000).toLowerCase();
+    return filePath.toLowerCase().includes(".codex") || /"session_meta"|"turn_context"|"response_item"|"event_msg"|"user_message"|"turn_diff"/.test(sample);
+  }
+
+  parse(filePath: string, content: string, context?: ParseContext): AILogConversation[] {
+    const rows = parseJsonLines(content);
+    const sessionId =
+      rows.map((row) => stringValue(asRecord(row).session_id) ?? stringValue(asRecord(row).sessionId) ?? stringValue(asRecord(row).conversation_id)).find(Boolean) ??
+      stableId(["codex", filePath]);
+    const conversationId = stableId(["codex-cli", sessionId, filePath]);
+    const messages: AILogMessage[] = [];
+    let cwd = context?.projectPath;
+    let model: string | undefined;
+
+    rows.forEach((row, index) => {
+      const record = asRecord(row);
+      const type = stringValue(record.type) ?? stringValue(record.event) ?? stringValue(record.kind);
+      if (type === "session_meta" || type === "turn_context") {
+        cwd = stringValue(record.cwd) ?? stringValue(record.working_dir) ?? cwd;
+        model = stringValue(record.model) ?? model;
+        return;
+      }
+      const item = record.item ?? record.message ?? record;
+      const itemRecord = asRecord(item);
+      const itemType = stringValue(itemRecord.type) ?? type;
+      const content =
+        extractContent(itemRecord.content) ||
+        extractContent(itemRecord.text) ||
+        extractContent(itemRecord.message) ||
+        extractContent(record.message) ||
+        extractContent(record.content);
+      const role = normalizeCodexRole(stringValue(itemRecord.role) ?? stringValue(record.role) ?? itemType);
+      const toolCalls = extractToolCalls(itemRecord.content ?? itemRecord, itemRecord.tool_calls ?? record.tool_calls);
+      if (!content && !toolCalls.length) return;
+      messages.push({
+        id: stableId([filePath, conversationId, index, role, content.slice(0, 80)]),
+        conversationId,
+        role,
+        providerRole: itemType,
+        content: content || summarizeToolCalls(toolCalls),
+        rawContent: row,
+        createdAt: normalizeDate(record.timestamp ?? record.created_at ?? record.time, undefined),
+        model: stringValue(itemRecord.model) ?? stringValue(record.model) ?? model,
+        tokenUsage: extractTokenUsage(itemRecord.usage ?? record.usage),
+        toolCalls
+      });
+    });
+
+    return [
+      {
+        id: conversationId,
+        provider: "codex-cli",
+        projectName: context?.projectName ?? deriveProjectName(cwd ?? filePath),
+        projectPath: cwd,
+        title: deriveConversationTitle(messages, path.basename(filePath)),
+        createdAt: messages[0]?.createdAt ?? normalizeDate(undefined),
+        updatedAt: messages.at(-1)?.createdAt ?? normalizeDate(undefined),
+        modelNames: [],
+        messageCount: 0,
+        userMessageCount: 0,
+        assistantMessageCount: 0,
+        toolCallCount: 0,
+        tags: [],
+        sourceFilePath: filePath,
+        messages,
+        metadata: { sessionId, parser: this.name }
+      }
+    ];
+  }
+}
+
+export class SseStreamAdapter implements ParserAdapter {
+  name = "sse-stream";
+
+  canParse(filePath: string, content: string): boolean {
+    const extension = path.extname(filePath).toLowerCase();
+    if (![".txt", ".log", ".jsonl"].includes(extension)) return false;
+    return /^data:\s*\{.+/m.test(content) || content.includes("event: message") || content.includes("[DONE]");
+  }
+
+  parse(filePath: string, content: string, context?: ParseContext): AILogConversation[] {
+    const provider = context?.provider ?? inferProviderFromContent(content);
+    const conversationId = stableId(["sse", provider, filePath]);
+    const chunks = parseSseEvents(content);
+    const messages: AILogMessage[] = [];
+    let assistantBuffer = "";
+    let index = 0;
+
+    for (const chunk of chunks) {
+      if (chunk === "[DONE]") continue;
+      const record = asRecord(chunk);
+      const choices = Array.isArray(record.choices) ? record.choices : [];
+      const deltaText = choices
+        .map((choice) => extractContent(asRecord(choice).delta ?? asRecord(choice).message ?? choice))
+        .join("");
+      const content = deltaText || extractContent(record.content ?? record.text ?? record.output);
+      if (!content) continue;
+      assistantBuffer += content;
+      const finishReason = choices.some((choice) => stringValue(asRecord(choice).finish_reason));
+      if (finishReason || assistantBuffer.length > 6000) {
+        messages.push({
+          id: stableId([filePath, conversationId, index, assistantBuffer.slice(0, 80)]),
+          conversationId,
+          role: "assistant",
+          providerRole: "sse_delta",
+          content: assistantBuffer,
+          rawContent: chunk,
+          createdAt: normalizeDate(record.created ?? record.timestamp, undefined),
+          model: stringValue(record.model),
+          tokenUsage: extractTokenUsage(record.usage)
+        });
+        assistantBuffer = "";
+        index += 1;
+      }
+    }
+
+    if (assistantBuffer) {
+      messages.push({
+        id: stableId([filePath, conversationId, index, assistantBuffer.slice(0, 80)]),
+        conversationId,
+        role: "assistant",
+        providerRole: "sse_delta",
+        content: assistantBuffer,
+        rawContent: assistantBuffer,
+        createdAt: normalizeDate(undefined)
+      });
+    }
+
+    return [
+      {
+        id: conversationId,
+        provider,
+        projectName: context?.projectName ?? deriveProjectName(context?.projectPath ?? filePath),
+        projectPath: context?.projectPath,
+        title: `SSE stream ${path.basename(filePath)}`,
+        createdAt: messages[0]?.createdAt ?? normalizeDate(undefined),
+        updatedAt: messages.at(-1)?.createdAt ?? normalizeDate(undefined),
+        modelNames: [],
+        messageCount: 0,
+        userMessageCount: 0,
+        assistantMessageCount: 0,
+        toolCallCount: 0,
+        tags: ["sse"],
+        sourceFilePath: filePath,
+        messages,
+        metadata: { parser: this.name }
+      }
+    ];
   }
 }
 
@@ -622,6 +779,37 @@ function parseJsonLines(content: string): unknown[] {
       }
     });
 }
+
+function parseSseEvents(content: string): unknown[] {
+  const events: unknown[] = [];
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const payload = trimmed.slice(5).trim();
+    if (!payload) continue;
+    if (payload === "[DONE]") {
+      events.push(payload);
+      continue;
+    }
+    try {
+      events.push(JSON.parse(payload) as unknown);
+    } catch {
+      events.push({ text: payload });
+    }
+  }
+  return events;
+}
+
+function normalizeCodexRole(value: unknown): AILogMessage["role"] {
+  const role = String(value ?? "").toLowerCase();
+  if (/user|input|human|user_message/.test(role)) return "user";
+  if (/assistant|response|output|message|response_item/.test(role)) return "assistant";
+  if (/tool|function|call/.test(role)) return "tool";
+  if (/error|failed/.test(role)) return "error";
+  if (/system|context|meta/.test(role)) return "system";
+  return "event";
+}
+
 
 function inferProviderFromPath(filePath: string): Provider {
   const lower = filePath.toLowerCase();

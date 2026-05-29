@@ -83,6 +83,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   app.get("/api/stats/projects", async () => repository.projectInsights());
   app.get("/api/stats/timeline", async () => repository.listConversations({ sort: "newest" }, false));
+  app.get("/api/stats/ai-behavior", async () => repository.aiBehavior());
+  app.get("/api/stats/collaboration", async () => repository.collaborationMetrics());
+
+  app.get("/api/compare", async (request, reply) => {
+    const query = request.query as { leftId?: string; rightId?: string };
+    if (!query.leftId || !query.rightId) return reply.code(400).send({ message: "leftId and rightId are required" });
+    const result = await repository.compare(query.leftId, query.rightId);
+    if (!result) return reply.code(404).send({ message: "Conversation not found" });
+    return result;
+  });
+
+  app.get("/api/privacy/sensitive", async () => repository.sensitiveFindings());
+  app.get("/api/sqlite/status", async () => repository.sqliteStatus());
+  app.post("/api/sqlite/rebuild", async () => repository.sqliteStatus());
 
   app.get("/api/prompts", async () => {
     const conversations = await repository.listConversations({}, true);
@@ -125,10 +139,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.get("/api/prompt-library", async () => repository.promptLibrary());
 
   app.post("/api/prompt-library", async (request) => {
-    return {
-      saved: true,
-      item: request.body
-    };
+    const body = request.body as { content?: string; title?: string; tags?: string[]; group?: string };
+    if (!body.content) throw new Error("content is required");
+    return repository.savePromptLibraryItem({ content: body.content, title: body.title, tags: body.tags, group: body.group });
   });
 
   app.post("/api/export/conversation/:id", async (request, reply) => {
@@ -141,6 +154,25 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.post("/api/export/report", async (request) => {
     const body = (request.body ?? {}) as { type?: string; redact?: boolean };
     return repository.exportReport(body.type ?? "weekly", body.redact ?? true);
+  });
+
+  app.post("/api/export/backup", async () => repository.exportBackup());
+
+  app.get("/api/live-sessions", async () => repository.listLiveSessions());
+  app.post("/api/live-sessions", async (request) => repository.createLiveSession(request.body as { cwd?: string; provider?: "claude-code" | "codex-cli" | "terminal"; command?: string }));
+
+  app.get("/api/team/workspaces", async () => repository.listTeamWorkspaces());
+  app.post("/api/team/workspaces", async (request) => repository.saveTeamWorkspace(request.body as { name: string; rootPath?: string }));
+
+  app.get("/api/capabilities", async () => repository.capabilities());
+
+  app.post("/api/conversations/:id/summary", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      return await repository.summarizeConversation(id);
+    } catch {
+      return reply.code(404).send({ message: "Conversation not found" });
+    }
   });
 
   app.get("/api/doctor", async () => repository.doctor());

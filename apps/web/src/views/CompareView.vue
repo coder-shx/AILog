@@ -20,24 +20,39 @@
       <CompareCard label="Left" :conversation="left" />
       <CompareCard label="Right" :conversation="right" />
     </div>
+    <div v-if="comparison" class="panel p-4">
+      <h2 class="section-title mb-4">Delta Metrics</h2>
+      <div class="grid gap-2 md:grid-cols-2">
+        <div v-for="metric in comparison.metrics" :key="metric.label" class="flex items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[#101314] px-3 py-2 text-sm">
+          <span>{{ metric.label }}</span>
+          <span class="mono">{{ metric.left }} → {{ metric.right }} <span v-if="metric.delta !== undefined" class="text-[#9da5a2]">({{ metric.delta >= 0 ? '+' : '' }}{{ metric.delta }})</span></span>
+        </div>
+      </div>
+    </div>
     <EmptyState v-else title="Select two conversations" text="Use the selectors above to compare message count, tokens, tools, models and tags." :icon="GitCompareArrows" />
   </section>
 </template>
 
 <script setup lang="ts">
 import { GitCompareArrows } from "lucide-vue-next";
-import { computed, defineComponent, h, ref } from "vue";
-import type { AILogConversation } from "@ailog/shared";
+import { computed, defineComponent, h, ref, watch } from "vue";
+import type { AILogConversation, ConversationCompareResult } from "@ailog/shared";
 import EmptyState from "@/components/EmptyState.vue";
 import ProviderBadge from "@/components/ProviderBadge.vue";
+import { client } from "@/lib/api";
 import { useAILogStore } from "@/stores/ailog";
 
 const store = useAILogStore();
 const conversations = computed(() => store.conversations);
 const leftId = ref("");
 const rightId = ref("");
+const comparison = ref<ConversationCompareResult | null>(null);
 const left = computed(() => conversations.value.find((conversation) => conversation.id === leftId.value));
 const right = computed(() => conversations.value.find((conversation) => conversation.id === rightId.value));
+
+watch([leftId, rightId], async () => {
+  comparison.value = leftId.value && rightId.value ? await client.compare(leftId.value, rightId.value) : null;
+});
 
 const CompareCard = defineComponent({
   props: { label: { type: String, required: true }, conversation: { type: Object as () => AILogConversation, required: true } },

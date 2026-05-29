@@ -39,6 +39,30 @@ async function main(): Promise<void> {
       process.stdout.write(report.content);
       break;
     }
+    case "privacy": {
+      writeJson(await repository.sensitiveFindings());
+      break;
+    }
+    case "sqlite": {
+      writeJson(await repository.sqliteStatus());
+      break;
+    }
+    case "compare": {
+      const leftId = stringFlag(args, "--left");
+      const rightId = stringFlag(args, "--right");
+      if (!leftId || !rightId) throw new Error("Usage: ailog compare --left <conversation-id> --right <conversation-id>");
+      writeJson(await repository.compare(leftId, rightId));
+      break;
+    }
+    case "backup": {
+      const backup = await repository.exportBackup();
+      process.stdout.write(backup.content);
+      break;
+    }
+    case "capabilities": {
+      writeJson(await repository.capabilities());
+      break;
+    }
     case "doctor": {
       writeJson(await repository.doctor());
       break;
@@ -93,6 +117,11 @@ Commands:
   ailog search "修复 bug" [--limit 20] [--regex]
   ailog export --id <conversation-id> --format markdown|json|html
   ailog report weekly|monthly|project
+  ailog privacy
+  ailog sqlite
+  ailog compare --left <conversation-id> --right <conversation-id>
+  ailog backup
+  ailog capabilities
   ailog doctor
   ailog serve
 `;

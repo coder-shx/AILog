@@ -67,6 +67,28 @@ export interface PromptQualityScore {
   missingSignals: string[];
 }
 
+export interface SensitiveFinding {
+  id: string;
+  type:
+    | "openai_key"
+    | "anthropic_key"
+    | "github_token"
+    | "jwt"
+    | "ssh_private_key"
+    | "email"
+    | "phone"
+    | "url_token"
+    | "env_secret"
+    | "path";
+  severity: "low" | "medium" | "high";
+  conversationId?: string;
+  messageId?: string;
+  sourceFilePath?: string;
+  excerpt: string;
+  start?: number;
+  end?: number;
+}
+
 export interface AILogMessage {
   id: string;
   conversationId: string;
@@ -267,6 +289,109 @@ export interface ProjectInsight {
   topConversations: AILogConversation[];
 }
 
+export interface ConversationCompareMetric {
+  label: string;
+  left: number | string;
+  right: number | string;
+  delta?: number;
+}
+
+export interface ConversationCompareResult {
+  left: AILogConversation;
+  right: AILogConversation;
+  metrics: ConversationCompareMetric[];
+  commonModels: string[];
+  onlyLeftModels: string[];
+  onlyRightModels: string[];
+  commonTags: string[];
+  onlyLeftTags: string[];
+  onlyRightTags: string[];
+  commonFiles: string[];
+  onlyLeftFiles: string[];
+  onlyRightFiles: string[];
+  promptKeywordDelta: {
+    leftOnly: WordFrequency[];
+    rightOnly: WordFrequency[];
+  };
+}
+
+export interface AIBehaviorInsight {
+  assistantReplies: number;
+  averageReplyLength: number;
+  averageCodeBlocks: number;
+  markdownHeadingRatio: number;
+  listRatio: number;
+  planRatio: number;
+  asksForMoreInfoRatio: number;
+  longExplanationRatio: number;
+  toolUseRatio: number;
+}
+
+export interface CollaborationMetrics {
+  averageTurnsPerTask: number;
+  averageToolCallsPerTask: number;
+  averageTokensPerTask: number;
+  firstTrySuccessRate?: number;
+  errorRecoveryCount: number;
+  repeatedPromptRate: number;
+  longContextSessionRate: number;
+}
+
+export interface PromptLibraryItem {
+  id: string;
+  conversationId?: string;
+  messageId?: string;
+  projectName?: string;
+  title: string;
+  content: string;
+  group?: string;
+  tags: string[];
+  score?: number;
+  intent?: PromptIntent;
+  useCount: number;
+  favorite: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LiveSession {
+  id: string;
+  provider: "claude-code" | "codex-cli" | "terminal" | "unknown";
+  cwd: string;
+  command?: string;
+  status: "created" | "running" | "stopped" | "error";
+  transcript: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeamWorkspace {
+  id: string;
+  name: string;
+  rootPath: string;
+  members: Array<{ id: string; name: string; role: "owner" | "maintainer" | "viewer" }>;
+  sharedIndexPath?: string;
+  localOnly: boolean;
+  createdAt: string;
+}
+
+export interface CapabilityStatus {
+  id: string;
+  name: string;
+  status: "ready" | "configured" | "disabled" | "scaffolded";
+  localFirst: boolean;
+  description: string;
+  entry?: string;
+}
+
+export interface BackupManifest {
+  version: number;
+  generatedAt: string;
+  conversations: number;
+  promptLibraryItems: number;
+  settings: AILogSettings;
+}
+
 export interface ExportRequest {
   format: "markdown" | "json" | "html";
   redact?: boolean;
@@ -283,4 +408,3 @@ export interface AILogIndex {
   generatedAt: string;
   conversations: AILogConversation[];
 }
-

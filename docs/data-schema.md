@@ -65,3 +65,22 @@ interface AILogIndex {
 ```
 
 The MVP writes this structure to `.ailog/index.json`.
+
+## SQLite Mirror
+
+The optional SQLite mirror creates these tables:
+
+- `conversations`
+- `messages`
+- `tool_calls`
+
+The mirror is optimized for local querying and can be rebuilt from `.ailog/index.json`.
+
+## Final Version Entities
+
+- `PromptLibraryItem`: persisted reusable prompts.
+- `SensitiveFinding`: local privacy scan results.
+- `ConversationCompareResult`: structured two-session delta.
+- `LiveSession`: local marker for active Claude/Codex/terminal work.
+- `TeamWorkspace`: local-only team workspace metadata.
+- `CapabilityStatus`: extension/desktop/MCP/local LLM capability inventory.

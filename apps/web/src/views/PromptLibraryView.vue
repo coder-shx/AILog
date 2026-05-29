@@ -32,10 +32,11 @@
 <script setup lang="ts">
 import { BookMarked, Copy, RefreshCcw } from "lucide-vue-next";
 import { onMounted, ref } from "vue";
+import type { PromptLibraryItem } from "@ailog/shared";
 import EmptyState from "@/components/EmptyState.vue";
 import { client } from "@/lib/api";
 
-const items = ref<Array<Record<string, unknown>>>([]);
+const items = ref<PromptLibraryItem[]>([]);
 onMounted(load);
 
 async function load() {

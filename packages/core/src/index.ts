@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import {
   analyzePrompts,
+  analyzeAIBehavior,
+  compareConversations,
   compactConversation,
+  computeCollaborationMetrics,
   computeOverviewStats,
   computeProjectInsights,
   filterConversations,
@@ -12,23 +15,33 @@ import {
   redactSensitive,
   renderConversationHtml,
   renderConversationMarkdown,
+  scanSensitiveFindings,
   searchConversations
 } from "@ailog/analyzer";
 import { pathExists, scanSources } from "@ailog/parser";
 import {
   defaultSettings,
   isoNow,
+  stableId,
   type AILogConversation,
   type AILogIndex,
   type AILogSettings,
+  type BackupManifest,
+  type CapabilityStatus,
+  type ConversationCompareResult,
   type ConversationFilters,
   type ExportRequest,
   type ExportResult,
+  type LiveSession,
+  type PromptLibraryItem,
   type ProjectInsight,
   type Provider,
   type ScanResult,
-  type SearchQuery
+  type SearchQuery,
+  type SensitiveFinding,
+  type TeamWorkspace
 } from "@ailog/shared";
+import { rebuildSqliteIndex, type SqliteIndexStatus } from "./sqlite";
 
 export interface RepositoryOptions {
   workspaceRoot?: string;
@@ -53,12 +66,20 @@ export class AILogRepository {
   readonly dataDir: string;
   readonly settingsPath: string;
   readonly indexPath: string;
+  readonly sqlitePath: string;
+  readonly promptLibraryPath: string;
+  readonly liveSessionsPath: string;
+  readonly teamWorkspacesPath: string;
 
   constructor(options: RepositoryOptions = {}) {
     this.workspaceRoot = options.workspaceRoot ?? findWorkspaceRoot(process.cwd());
     this.dataDir = options.dataDir ?? path.join(this.workspaceRoot, ".ailog");
     this.settingsPath = path.join(this.dataDir, "settings.json");
     this.indexPath = path.join(this.dataDir, "index.json");
+    this.sqlitePath = path.join(this.dataDir, "index.sqlite");
+    this.promptLibraryPath = path.join(this.dataDir, "prompt-library.json");
+    this.liveSessionsPath = path.join(this.dataDir, "live-sessions.json");
+    this.teamWorkspacesPath = path.join(this.dataDir, "team-workspaces.json");
   }
 
   async getSettings(): Promise<AILogSettings> {
@@ -91,6 +112,7 @@ export class AILogRepository {
     const previousById = new Map(previous.conversations.map((conversation) => [conversation.id, conversation]));
     const merged = conversations.map((conversation) => mergeConversationState(conversation, previousById.get(conversation.id)));
     await this.saveIndex(merged);
+    if (settings.useSQLiteIndex) await rebuildSqliteIndex(this.sqlitePath, merged);
     return { result, conversations: merged };
   }
 
@@ -166,33 +188,215 @@ export class AILogRepository {
     return computeProjectInsights(index.conversations);
   }
 
+  async compare(leftId: string, rightId: string): Promise<ConversationCompareResult | undefined> {
+    const index = await this.loadIndex();
+    const left = index.conversations.find((conversation) => conversation.id === leftId);
+    const right = index.conversations.find((conversation) => conversation.id === rightId);
+    return left && right ? compareConversations(left, right) : undefined;
+  }
+
+  async aiBehavior() {
+    const index = await this.loadIndex();
+    return analyzeAIBehavior(index.conversations);
+  }
+
+  async collaborationMetrics() {
+    const index = await this.loadIndex();
+    return computeCollaborationMetrics(index.conversations);
+  }
+
+  async sensitiveFindings(): Promise<SensitiveFinding[]> {
+    const index = await this.loadIndex();
+    return scanSensitiveFindings(index.conversations);
+  }
+
+  async sqliteStatus(): Promise<SqliteIndexStatus> {
+    const index = await this.loadIndex();
+    return rebuildSqliteIndex(this.sqlitePath, index.conversations);
+  }
+
   async promptLibrary() {
+    const saved = await readJson<PromptLibraryItem[]>(this.promptLibraryPath, []);
     const index = await this.loadIndex();
     const insight = analyzePrompts(index.conversations);
-    const favorites = index.conversations.flatMap((conversation) =>
+    const generated = index.conversations.flatMap((conversation) =>
       conversation.messages
         .filter((message) => message.role === "user" && (message.favorite || (message.promptQuality?.total ?? 0) >= 78))
         .map((message) => ({
           id: message.id,
           conversationId: conversation.id,
+          messageId: message.id,
           projectName: conversation.projectName,
-          title: conversation.title,
+          title: conversation.title ?? "Reusable prompt",
           content: message.content,
           tags: message.tags ?? [],
           score: message.promptQuality?.total ?? 0,
           intent: message.promptIntent,
-          createdAt: message.createdAt ?? conversation.createdAt
+          useCount: 0,
+          favorite: Boolean(message.favorite),
+          createdAt: message.createdAt ?? conversation.createdAt,
+          updatedAt: message.createdAt ?? conversation.updatedAt
         }))
-    );
-    return [...favorites, ...insight.highQualityPrompts.map((message) => ({
+    ) satisfies PromptLibraryItem[];
+    const generatedFromInsight = insight.highQualityPrompts.map((message) => ({
       id: message.id,
       conversationId: message.conversationId,
+      messageId: message.id,
+      title: "High quality prompt",
       content: message.content,
       tags: message.tags ?? [],
       score: message.promptQuality?.total ?? 0,
       intent: message.promptIntent,
-      createdAt: message.createdAt
-    }))].slice(0, 80);
+      useCount: 0,
+      favorite: Boolean(message.favorite),
+      createdAt: message.createdAt ?? isoNow(),
+      updatedAt: message.createdAt ?? isoNow()
+    })) satisfies PromptLibraryItem[];
+    const byId = new Map<string, PromptLibraryItem>();
+    for (const item of [...generated, ...generatedFromInsight, ...saved]) byId.set(item.id, item);
+    return Array.from(byId.values()).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 120);
+  }
+
+  async savePromptLibraryItem(input: Partial<PromptLibraryItem> & { content: string }): Promise<PromptLibraryItem> {
+    await this.ensureDataDir();
+    const items = await readJson<PromptLibraryItem[]>(this.promptLibraryPath, []);
+    const now = isoNow();
+    const item: PromptLibraryItem = {
+      id: input.id ?? stableId(["prompt-library", input.content, now]),
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      title: input.title ?? input.content.slice(0, 80),
+      content: input.content,
+      group: input.group,
+      tags: input.tags ?? [],
+      score: input.score,
+      intent: input.intent,
+      useCount: input.useCount ?? 0,
+      favorite: input.favorite ?? true,
+      createdAt: input.createdAt ?? now,
+      updatedAt: now
+    };
+    const next = [item, ...items.filter((candidate) => candidate.id !== item.id)];
+    await writeJson(this.promptLibraryPath, next);
+    return item;
+  }
+
+  async listLiveSessions(): Promise<LiveSession[]> {
+    return readJson<LiveSession[]>(this.liveSessionsPath, []);
+  }
+
+  async createLiveSession(input: Partial<LiveSession> & { cwd?: string }): Promise<LiveSession> {
+    const sessions = await this.listLiveSessions();
+    const now = isoNow();
+    const session: LiveSession = {
+      id: input.id ?? stableId(["live", input.provider, input.cwd, now]),
+      provider: input.provider ?? "terminal",
+      cwd: input.cwd ?? this.workspaceRoot,
+      command: input.command,
+      status: "created",
+      transcript: input.transcript ?? [],
+      createdAt: now,
+      updatedAt: now
+    };
+    await writeJson(this.liveSessionsPath, [session, ...sessions]);
+    return session;
+  }
+
+  async listTeamWorkspaces(): Promise<TeamWorkspace[]> {
+    return readJson<TeamWorkspace[]>(this.teamWorkspacesPath, []);
+  }
+
+  async saveTeamWorkspace(input: Partial<TeamWorkspace> & { name: string; rootPath?: string }): Promise<TeamWorkspace> {
+    const workspaces = await this.listTeamWorkspaces();
+    const workspace: TeamWorkspace = {
+      id: input.id ?? stableId(["team", input.name, input.rootPath ?? this.workspaceRoot]),
+      name: input.name,
+      rootPath: input.rootPath ?? this.workspaceRoot,
+      members: input.members ?? [{ id: "local-owner", name: "Local Owner", role: "owner" }],
+      sharedIndexPath: input.sharedIndexPath,
+      localOnly: input.localOnly ?? true,
+      createdAt: input.createdAt ?? isoNow()
+    };
+    await writeJson(this.teamWorkspacesPath, [workspace, ...workspaces.filter((item) => item.id !== workspace.id)]);
+    return workspace;
+  }
+
+  async capabilities(): Promise<CapabilityStatus[]> {
+    return [
+      {
+        id: "sqlite-index",
+        name: "SQLite index",
+        status: "ready",
+        localFirst: true,
+        description: "Mirrors the JSON index into node:sqlite tables for faster local queries.",
+        entry: this.sqlitePath
+      },
+      {
+        id: "mcp-server",
+        name: "MCP server",
+        status: "scaffolded",
+        localFirst: true,
+        description: "Exposes AILog stats and search through a local stdio MCP server.",
+        entry: "packages/mcp/src/index.ts"
+      },
+      {
+        id: "tauri-desktop",
+        name: "Tauri desktop",
+        status: "scaffolded",
+        localFirst: true,
+        description: "Desktop shell scaffold that points to the local Web UI.",
+        entry: "apps/desktop/src-tauri/tauri.conf.json"
+      },
+      {
+        id: "vscode-extension",
+        name: "VS Code extension",
+        status: "scaffolded",
+        localFirst: true,
+        description: "Command scaffold for opening AILog and searching local history from VS Code.",
+        entry: "extensions/vscode/package.json"
+      },
+      {
+        id: "browser-extension",
+        name: "Browser extension",
+        status: "scaffolded",
+        localFirst: true,
+        description: "Manifest V3 extension scaffold for importing exported AI conversations.",
+        entry: "extensions/browser/manifest.json"
+      },
+      {
+        id: "local-llm",
+        name: "Local LLM analysis",
+        status: "disabled",
+        localFirst: true,
+        description: "Opt-in local endpoint hook. Current summaries use heuristic local extraction."
+      }
+    ];
+  }
+
+  async summarizeConversation(id: string): Promise<{ id: string; summary: string; method: "heuristic" }> {
+    const conversation = await this.getConversation(id);
+    if (!conversation) throw new Error(`Conversation not found: ${id}`);
+    const prompts = conversation.messages.filter((message) => message.role === "user").slice(0, 3).map((message) => message.content);
+    const replies = conversation.messages.filter((message) => message.role === "assistant").slice(-2).map((message) => message.content);
+    return {
+      id,
+      method: "heuristic",
+      summary: redactSensitive([...prompts, ...replies].join("\n\n").replace(/\s+/g, " ").slice(0, 900))
+    };
+  }
+
+  async exportBackup(): Promise<{ manifest: BackupManifest; content: string }> {
+    const settings = await this.getSettings();
+    const index = await this.loadIndex();
+    const library = await readJson<PromptLibraryItem[]>(this.promptLibraryPath, []);
+    const manifest: BackupManifest = {
+      version: 1,
+      generatedAt: isoNow(),
+      conversations: index.conversations.length,
+      promptLibraryItems: library.length,
+      settings
+    };
+    return { manifest, content: JSON.stringify({ manifest, index, library }, null, 2) };
   }
 
   async exportConversation(id: string, request: ExportRequest): Promise<ExportResult | undefined> {

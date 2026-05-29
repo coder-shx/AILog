@@ -9,7 +9,10 @@ import {
   type AILogConversation,
   type AILogMessage,
   type AILogToolCall,
+  type AIBehaviorInsight,
+  type CollaborationMetrics,
   type ConversationFilters,
+  type ConversationCompareResult,
   type OverviewStats,
   type ProjectInsight,
   type PromptInsight,
@@ -18,6 +21,7 @@ import {
   type Provider,
   type SearchQuery,
   type SearchResult,
+  type SensitiveFinding,
   type TokenUsage,
   type WordFrequency
 } from "@ailog/shared";
@@ -410,6 +414,129 @@ export function computeProjectInsights(conversations: AILogConversation[]): Proj
     .sort((a, b) => b.conversationCount - a.conversationCount);
 }
 
+export function compareConversations(left: AILogConversation, right: AILogConversation): ConversationCompareResult {
+  const leftFiles = filesForConversation(left);
+  const rightFiles = filesForConversation(right);
+  const leftWords = topTerms(left.messages.filter((message) => message.role === "user").map((message) => message.content), 50);
+  const rightWords = topTerms(right.messages.filter((message) => message.role === "user").map((message) => message.content), 50);
+
+  return {
+    left: compactConversation(left),
+    right: compactConversation(right),
+    metrics: [
+      metric("Messages", left.messageCount, right.messageCount),
+      metric("User prompts", left.userMessageCount, right.userMessageCount),
+      metric("AI replies", left.assistantMessageCount, right.assistantMessageCount),
+      metric("Tokens", left.tokenUsage?.totalTokens ?? 0, right.tokenUsage?.totalTokens ?? 0),
+      metric("Tool calls", left.toolCallCount, right.toolCallCount),
+      metric("Files", leftFiles.length, rightFiles.length),
+      metric("Errors", left.hasErrors ? 1 : 0, right.hasErrors ? 1 : 0),
+      metric("Code generated", left.hasCode ? 1 : 0, right.hasCode ? 1 : 0)
+    ],
+    commonModels: intersection(left.modelNames, right.modelNames),
+    onlyLeftModels: difference(left.modelNames, right.modelNames),
+    onlyRightModels: difference(right.modelNames, left.modelNames),
+    commonTags: intersection(left.tags, right.tags),
+    onlyLeftTags: difference(left.tags, right.tags),
+    onlyRightTags: difference(right.tags, left.tags),
+    commonFiles: intersection(leftFiles, rightFiles),
+    onlyLeftFiles: difference(leftFiles, rightFiles),
+    onlyRightFiles: difference(rightFiles, leftFiles),
+    promptKeywordDelta: {
+      leftOnly: leftWords.filter((word) => !rightWords.some((item) => item.term === word.term)).slice(0, 20),
+      rightOnly: rightWords.filter((word) => !leftWords.some((item) => item.term === word.term)).slice(0, 20)
+    }
+  };
+}
+
+export function analyzeAIBehavior(conversations: AILogConversation[]): AIBehaviorInsight {
+  const replies = conversations.flatMap((conversation) => conversation.messages.filter((message) => message.role === "assistant"));
+  const totalLength = replies.reduce((sum, message) => sum + message.content.length, 0);
+  const codeBlocks = replies.reduce((sum, message) => sum + countCodeBlocks(message.content), 0);
+  const headings = replies.filter((message) => /^#{1,4}\s+/m.test(message.content)).length;
+  const lists = replies.filter((message) => /^\s*[-*]|\d+\.\s+/m.test(message.content)).length;
+  const plans = replies.filter((message) => /(plan|计划|步骤|step|todo|下一步)/i.test(message.content)).length;
+  const moreInfo = replies.filter((message) => /(请提供|需要你|补充|clarify|could you provide|need more)/i.test(message.content)).length;
+  const longReplies = replies.filter((message) => message.content.length > 2500).length;
+  const toolReplies = replies.filter((message) => (message.toolCalls?.length ?? 0) > 0).length;
+
+  return {
+    assistantReplies: replies.length,
+    averageReplyLength: replies.length ? Math.round(totalLength / replies.length) : 0,
+    averageCodeBlocks: replies.length ? Number((codeBlocks / replies.length).toFixed(2)) : 0,
+    markdownHeadingRatio: ratio(headings, replies.length),
+    listRatio: ratio(lists, replies.length),
+    planRatio: ratio(plans, replies.length),
+    asksForMoreInfoRatio: ratio(moreInfo, replies.length),
+    longExplanationRatio: ratio(longReplies, replies.length),
+    toolUseRatio: ratio(toolReplies, replies.length)
+  };
+}
+
+export function computeCollaborationMetrics(conversations: AILogConversation[]): CollaborationMetrics {
+  const promptTexts = conversations.flatMap((conversation) => conversation.messages.filter((message) => message.role === "user").map((message) => normalizePromptForRepeat(message.content)));
+  const repeated = promptTexts.filter((prompt, index) => prompt && promptTexts.indexOf(prompt) !== index).length;
+  const errorSessions = conversations.filter((conversation) => conversation.hasErrors).length;
+  const longContextSessions = conversations.filter((conversation) => (conversation.tokenUsage?.totalTokens ?? 0) > 60000 || conversation.messageCount > 80).length;
+  const totalTools = conversations.reduce((sum, conversation) => sum + conversation.toolCallCount, 0);
+  const totalTokens = conversations.reduce((sum, conversation) => sum + (conversation.tokenUsage?.totalTokens ?? 0), 0);
+  const totalTurns = conversations.reduce((sum, conversation) => sum + conversation.userMessageCount, 0);
+
+  return {
+    averageTurnsPerTask: conversations.length ? Number((totalTurns / conversations.length).toFixed(2)) : 0,
+    averageToolCallsPerTask: conversations.length ? Number((totalTools / conversations.length).toFixed(2)) : 0,
+    averageTokensPerTask: conversations.length ? Math.round(totalTokens / conversations.length) : 0,
+    firstTrySuccessRate: conversations.length ? Number(((conversations.length - errorSessions) / conversations.length).toFixed(3)) : undefined,
+    errorRecoveryCount: conversations.reduce((sum, conversation) => sum + (conversation.messages.filter((message) => /retry|重试|再次|重新/i.test(message.content)).length > 0 ? 1 : 0), 0),
+    repeatedPromptRate: ratio(repeated, promptTexts.length),
+    longContextSessionRate: ratio(longContextSessions, conversations.length)
+  };
+}
+
+export function scanSensitiveFindings(conversations: AILogConversation[]): SensitiveFinding[] {
+  const findings: SensitiveFinding[] = [];
+  const checks: Array<{ type: SensitiveFinding["type"]; severity: SensitiveFinding["severity"]; pattern: RegExp }> = [
+    { type: "openai_key", severity: "high", pattern: /sk-[A-Za-z0-9_-]{20,}/g },
+    { type: "anthropic_key", severity: "high", pattern: /sk-ant-[A-Za-z0-9_-]{20,}/g },
+    { type: "github_token", severity: "high", pattern: /gh[pousr]_[A-Za-z0-9_]{20,}/g },
+    { type: "jwt", severity: "medium", pattern: /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g },
+    { type: "ssh_private_key", severity: "high", pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g },
+    { type: "email", severity: "low", pattern: EMAIL_RE },
+    { type: "phone", severity: "medium", pattern: PHONE_RE },
+    { type: "url_token", severity: "medium", pattern: /[?&](?:token|key|secret|access_token)=([^&\s]+)/gi },
+    { type: "env_secret", severity: "high", pattern: /^\s*[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*=\s*.+$/gim },
+    { type: "path", severity: "low", pattern: /(?:[A-Za-z]:\\Users\\[^\\\s]+|\/Users\/[^/\s]+)/g }
+  ];
+
+  for (const conversation of conversations) {
+    const scopes = [
+      { content: conversation.sourceFilePath, messageId: undefined },
+      ...conversation.messages.map((message) => ({ content: message.content, messageId: message.id }))
+    ];
+    for (const scope of scopes) {
+      for (const check of checks) {
+        check.pattern.lastIndex = 0;
+        for (const match of scope.content.matchAll(check.pattern)) {
+          const start = match.index ?? 0;
+          const end = start + match[0].length;
+          findings.push({
+            id: stableId([conversation.id, scope.messageId, check.type, start, match[0].slice(0, 20)]),
+            type: check.type,
+            severity: check.severity,
+            conversationId: conversation.id,
+            messageId: scope.messageId,
+            sourceFilePath: conversation.sourceFilePath,
+            excerpt: redactSensitive(scope.content.slice(Math.max(0, start - 32), Math.min(scope.content.length, end + 32))),
+            start,
+            end
+          });
+        }
+      }
+    }
+  }
+  return findings;
+}
+
 export function redactSensitive(value: string): string {
   let output = value;
   for (const pattern of API_KEY_PATTERNS) {
@@ -634,6 +761,33 @@ function mapToWordFrequency(map: Map<string, number>): WordFrequency[] {
   return Array.from(map.entries())
     .map(([term, count]) => ({ term, count }))
     .sort((a, b) => b.count - a.count || a.term.localeCompare(b.term));
+}
+
+function metric(label: string, left: number | string, right: number | string): ConversationCompareResult["metrics"][number] {
+  return {
+    label,
+    left,
+    right,
+    delta: typeof left === "number" && typeof right === "number" ? right - left : undefined
+  };
+}
+
+function intersection(left: string[], right: string[]): string[] {
+  const rightSet = new Set(right);
+  return Array.from(new Set(left.filter((item) => rightSet.has(item)))).sort();
+}
+
+function difference(left: string[], right: string[]): string[] {
+  const rightSet = new Set(right);
+  return Array.from(new Set(left.filter((item) => !rightSet.has(item)))).sort();
+}
+
+function filesForConversation(conversation: AILogConversation): string[] {
+  return Array.from(new Set(conversation.messages.flatMap((message) => message.toolCalls ?? []).flatMap((tool) => tool.relatedFiles ?? []))).sort();
+}
+
+function normalizePromptForRepeat(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 220);
 }
 
 function sortConversations(conversations: AILogConversation[], sort: NonNullable<ConversationFilters["sort"]>): AILogConversation[] {

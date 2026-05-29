@@ -1,0 +1,24 @@
+{
+  "name": "ailog-vscode",
+  "displayName": "AILog",
+  "description": "Open and search your local AILog index from VS Code.",
+  "version": "0.1.0",
+  "publisher": "ailog",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": ["onCommand:ailog.open", "onCommand:ailog.search"],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ailog.open",
+        "title": "AILog: Open Local Console"
+      },
+      {
+        "command": "ailog.search",
+        "title": "AILog: Search Local History"
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "AILog Import Helper",
+  "version": "0.1.0",
+  "description": "Local-first helper for saving exported AI conversations into AILog import folders.",
+  "permissions": ["downloads", "storage"],
+  "action": {
+    "default_title": "AILog"
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  }
+}

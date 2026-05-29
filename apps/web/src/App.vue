@@ -54,12 +54,15 @@ import {
   BarChart3,
   BookMarked,
   FileText,
+  GaugeCircle,
   GitCompareArrows,
   GitCommitHorizontal,
   LayoutDashboard,
+  Radio,
   RefreshCcw,
   Search,
   Settings,
+  ShieldCheck,
   Tags,
   Workflow
 } from "lucide-vue-next";
@@ -82,6 +85,9 @@ const nav = [
   { label: "Compare", path: "/compare", icon: GitCompareArrows },
   { label: "Library", path: "/library", icon: BookMarked },
   { label: "Reports", path: "/reports", icon: FileText },
+  { label: "Privacy", path: "/privacy", icon: ShieldCheck },
+  { label: "Live", path: "/live", icon: Radio },
+  { label: "Capabilities", path: "/capabilities", icon: GaugeCircle },
   { label: "Settings", path: "/settings", icon: Settings },
   { label: "Tags", path: "/timeline?tag=high-quality-prompt", icon: Tags }
 ];

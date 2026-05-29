@@ -11,6 +11,10 @@ AILog is a pnpm workspace split into UI, API and reusable local-first packages.
 - `packages/analyzer`: prompt intent classification, quality scoring, stats, search, redaction and reporting helpers.
 - `packages/shared`: TypeScript types, defaults and small utilities.
 - `packages/cli`: local command line entrypoints.
+- `packages/mcp`: local stdio MCP server that exposes AILog stats/search/recent tools.
+- `apps/desktop`: Tauri shell scaffold.
+- `extensions/vscode`: VS Code command scaffold.
+- `extensions/browser`: Manifest V3 import-helper scaffold.
 
 ## Data Flow
 
@@ -27,7 +31,14 @@ flowchart LR
 
 ## Local Index
 
-MVP storage is a JSON index at `.ailog/index.json`. This keeps the first version easy to inspect and backup. The schema is intentionally compatible with a later SQLite table layout.
+Primary storage remains a JSON index at `.ailog/index.json` for inspectability and backup. When SQLite indexing is enabled, `packages/core/src/sqlite.ts` mirrors conversations, messages and tool calls into `.ailog/index.sqlite` using Node's local `node:sqlite` runtime.
+
+## Runtime Surfaces
+
+- Web UI: `http://127.0.0.1:1420`
+- API: `http://127.0.0.1:1421`
+- MCP stdio server: `corepack pnpm --filter @ailog/mcp start`
+- CLI: `corepack pnpm --filter @ailog/cli ailog <command>`
 
 ## Extension Points
 
